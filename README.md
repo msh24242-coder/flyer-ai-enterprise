@@ -1,154 +1,105 @@
-# Flyer AI - Frontend
+# Flyer AI Enterprise - Backend
 
-Next.js-based web application for the Flyer AI platform.
+NestJS-based API for the Flyer AI Enterprise platform.
 
 ## Quick Start
 
 ### Prerequisites
 - Node.js 20+
-- Backend API running on http://localhost:3001
+- PostgreSQL 16
+- Redis 7
+- RabbitMQ 3.12
 
 ### Installation
 
 ```bash
-cd frontend
+cd backend
 npm install
+```
+
+### Database Setup
+
+```bash
+# Create database
+npx prisma migrate dev --name init
+
+# Seed database
+npx prisma db seed
+
+# View database
+npx prisma studio
+```
+
+### Development
+
+```bash
 npm run dev
 ```
 
-App will be available at http://localhost:3000
+Server runs on http://localhost:3001
+
+## API Endpoints
+
+### Authentication
+- `POST /api/v1/auth/register` - Register new user
+- `POST /api/v1/auth/login` - Login user
+- `GET /api/v1/auth/profile` - Get user profile
+- `GET /api/v1/auth/health` - Health check
+
+### Products
+- `GET /api/v1/products` - List products
+- `POST /api/v1/products` - Create product
+- `GET /api/v1/products/:id` - Get product
+- `PUT /api/v1/products/:id` - Update product
+- `DELETE /api/v1/products/:id` - Delete product
+
+### Flyers
+- `GET /api/v1/flyers` - List flyers
+- `POST /api/v1/flyers` - Create flyer
+- `GET /api/v1/flyers/:id` - Get flyer
+- `PUT /api/v1/flyers/:id` - Update flyer
+- `POST /api/v1/flyers/:id/publish` - Publish flyer
+- `DELETE /api/v1/flyers/:id` - Delete flyer
+
+### Assets
+- `GET /api/v1/assets` - List assets
+- `POST /api/v1/assets` - Upload asset
+- `GET /api/v1/assets/:id` - Get asset
+- `DELETE /api/v1/assets/:id` - Delete asset
+
+### Users
+- `GET /api/v1/users` - List users
+- `GET /api/v1/users/:id` - Get user
 
 ## Project Structure
 
 ```
-frontend/
+backend/
 ├── src/
-│   ├── app/                    # Next.js pages
-│   │   ├── auth/               # Authentication pages
-│   │   ├── dashboard/          # Dashboard
-│   │   ├── layout.tsx          # Root layout
-│   │   ├── page.tsx            # Home page
-│   │   └── globals.css         # Global styles
-│   ├── components/             # React components
-│   ├── hooks/                  # Custom hooks
-│   │   └── useAuth.ts          # Auth hook
-│   ├── lib/                    # Utilities
-│   │   └── api.ts              # API client
-│   ├── store/                  # Zustand stores
-│   │   └── authStore.ts        # Auth store
-│   └── types/                  # TypeScript types
-├── public/                     # Static assets
+│   ├── main.ts                 # Entry point
+│   ├── app.module.ts           # Main module
+│   ├── modules/                # Feature modules
+│   │   ├── auth/               # Authentication
+│   │   ├── products/           # Products
+│   │   ├── flyers/             # Flyers
+│   │   ├── assets/             # Assets
+│   │   └── users/              # Users
+│   ├── common/                 # Shared utilities
+│   └── database/               # Database configuration
+├── prisma/
+│   ├── schema.prisma           # Database schema
+│   └── seed.ts                 # Seed data
 ├── package.json
 ├── tsconfig.json
-├── tailwind.config.ts
-├── next.config.js
-└── README.md
+└── .env
 ```
 
-## Available Scripts
+## Scripts
 
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
 - `npm start` - Start production server
-- `npm run lint` - Run ESLint
-- `npm run type-check` - Run TypeScript check
-- `npm run format` - Format code with Prettier
-
-## Features
-
-- 🎨 Modern UI with Tailwind CSS
-- 🔐 JWT-based authentication
-- 📱 Responsive design
-- ⚡ Fast with Next.js 14
-- 🎯 TypeScript for type safety
-- 🌐 API integration with axios
-- 🎪 State management with Zustand
-- 🔔 Toast notifications with react-hot-toast
-
-## Environment Variables
-
-Create `.env.local`:
-
-```
-NEXT_PUBLIC_API_URL=http://localhost:3001
-```
-
-## API Integration
-
-All API requests go through `src/lib/api.ts` which handles:
-- Base URL configuration
-- Authentication headers
-- Error handling
-- Token refresh
-
-## Components
-
-### Pages
-- `app/` - Home page
-- `app/auth/login/` - Login page
-- `app/auth/register/` - Registration page
-- `app/dashboard/` - Dashboard page
-
-### Hooks
-- `useAuth()` - Authentication hook with login/register/logout
-
-### Stores
-- `authStore` - Global authentication state with Zustand
-
-## Styling
-
-Uses Tailwind CSS for styling with custom configuration in `tailwind.config.ts`.
-
-## Performance
-
-- Image optimization with Next.js
-- CSS module support
-- API response caching
-- Lazy loading components
-
-## Testing
-
-```bash
-npm test
-```
-
-## Deployment
-
-1. Build the project:
-```bash
-npm run build
-```
-
-2. Run production server:
-```bash
-npm start
-```
-
-Or use Docker:
-```bash
-docker build -f ../docker/Dockerfile.frontend -t flyer-ai-frontend .
-docker run -p 3000:3000 flyer-ai-frontend
-```
-
-## Troubleshooting
-
-### API Connection Issues
-- Ensure backend is running on http://localhost:3001
-- Check `.env.local` configuration
-- Verify CORS is enabled in backend
-
-### Build Errors
-- Clear `.next` directory: `rm -rf .next`
-- Reinstall dependencies: `rm -rf node_modules && npm install`
-- Run type check: `npm run type-check`
-
-## Contributing
-
-1. Create feature branch
-2. Make changes
-3. Run tests and linting
-4. Submit PR
-
-## License
-
-MIT
+- `npm test` - Run tests
+- `npm run migrate` - Run database migrations
+- `npm run seed` - Seed database
+- `npm run prisma:studio` - Open Prisma Studio
