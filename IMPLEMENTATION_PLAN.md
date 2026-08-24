@@ -1,574 +1,571 @@
 # AI Marketing OS — Implementation Plan
 
-**Version**: 1.0  
+**Version**: 2.0  
 **Status**: Design (awaiting approval)  
-**Milestone**: First vertical slice — Marketing Director Agent end-to-end
+**Scope**: First vertical slice end-to-end — Auth → Company → Agent Engine → Marketing Director → Memory → Goals → Campaigns → Tasks → Dashboard
 
 ---
 
-## Overview
+## Guiding Principles
 
-This plan covers everything required to deliver a real, working first slice:
-
-- User registers and logs in
-- Company is created and configured
-- User opens a chat with the Marketing Director Agent
-- Agent has a persistent conversation, asks questions, and creates real goals/campaigns/tasks in the database
-- User sees the created goals and campaigns on a minimal dashboard
-- All data is stored in PostgreSQL; memory uses pgvector
-
-**Definition of Done**:  
-A user can sign up, talk to the Marketing Director Agent, and see real campaigns and tasks created in the database — with conversation history persisted across page reloads.
+1. **No placeholder code** — every file delivered is real and functional
+2. **No mock agents** — only the Director Agent is built; future agents are not stubbed
+3. **No fake APIs** — every endpoint talks to a real database
+4. **Test doubles only in tests** — no mock data in production paths
+5. **Security-first** — credentials rotated before any implementation begins
+6. **Layer discipline** — no layer skips another (see ARCHITECTURE.md §2)
+7. **Observability from day one** — tracing and cost tracking wired in Phase 1
 
 ---
 
-## Prerequisites
+## Pre-Implementation Security Checklist
 
-Before writing any application code:
+**MUST COMPLETE BEFORE WRITING ANY CODE**
 
-- [ ] Rotate compromised Supabase credentials (change DB password on Supabase dashboard, or use local PG only)
-- [ ] Remove `.env` from git history using `git filter-repo` or BFG
-- [ ] Ensure `.env` is in `.gitignore` (already is, but verify it wasn't overridden)
-- [ ] Add `ANTHROPIC_API_KEY` to local `.env`
-- [ ] Confirm Docker is running and port 5432 + 6379 are free
+- [ ] Rotate Supabase database password (`FlyerAI2026Secure` is exposed in committed `.env`)
+- [ ] Regenerate Supabase project credentials (project `swnvjzdhwdthjujugsup`)
+- [ ] Purge `.env` from entire git history (`git filter-repo` or `BFG Repo-Cleaner`)
+- [ ] Add `.env` to `.gitignore` (confirm it is listed)
+- [ ] Generate new `JWT_SECRET` — minimum 64 random bytes (`openssl rand -hex 64`)
+- [ ] Generate new `REFRESH_TOKEN_SECRET` — different value, same length
+- [ ] Add `.env.example` with blank values and documentation — this file IS committed
+- [ ] Verify: `git log --all -- .env` shows no `.env` commits in new history
+
+This is not optional. The old credentials are permanently compromised.
 
 ---
 
-## Phase 0 — Repository Setup (Day 1, ~2 hours)
+## Phase 0 — Repository Foundation
+**Duration**: 1 day
 
-### Tasks
+### 0.1 Clean Up Stale Documentation
 
-**0.1 Clean old files**
-Remove files that are junk or will cause confusion:
+- [ ] Delete `COMPLETION_SUMMARY.md` (describes a non-existent implementation)
+- [ ] Delete `AUDIT_SUMMARY.md` (audit of the other machine's project)
+- [ ] Delete `IMPLEMENTATION_ROADMAP.md` (superseded by this plan)
+- [ ] Delete `structure.txt` (3MB Windows tree output)
+- [ ] Retain: `ARCHITECTURE.md`, `DATABASE_DESIGN.md`, `AGENT_DESIGN.md`, `IMPLEMENTATION_PLAN.md`
+
+### 0.2 Monorepo Workspace Setup
+
 ```
-COMPLETION_SUMMARY.md        ← delete
-START_HERE.md                ← delete
-test-backend.sh              ← delete
-Makefile                     ← delete (will rewrite)
-docker-compose.override.yml  ← delete
-structure.txt                ← delete (3MB Windows listing)
-package-lock.json (root)     ← delete
-```
-
-**0.2 Update `.gitignore`**
-Ensure `.env` and `*.env.local` are listed. Add `node_modules/`, `.next/`, `dist/`.
-
-**0.3 Simplify `docker-compose.yml`**
-Remove the `backend` service (broken build context). Remove `rabbitmq`, `elasticsearch`, `pgadmin`.
-Keep: `postgres`, `redis`.
-
-Add pgvector initialization:
-```yaml
-postgres:
-  image: pgvector/pgvector:pg16    # official pgvector + postgres 16 image
-  environment:
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: postgres
-    POSTGRES_DB: ai_marketing_os
-  ports:
-    - "5432:5432"
-  volumes:
-    - postgres_data:/var/lib/postgresql/data
-  healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U postgres"]
-    interval: 5s
-    timeout: 3s
-    retries: 10
+ai-marketing-os/
+├── backend/          ← NestJS 11 API
+├── frontend/         ← Next.js 15 App
+├── package.json      ← workspace root (pnpm workspaces)
+└── docker-compose.yml
 ```
 
-**0.4 Create `backend/` directory**
-Init NestJS project:
-```bash
-cd backend
-npm init -y
-# Install core packages (see package list in Phase 1)
-```
-
-**0.5 Create `frontend/` directory**
-Init Next.js project:
-```bash
-npx create-next-app@latest frontend --typescript --tailwind --eslint --app --no-src-dir
-```
-Then move existing `tailwind.config.ts` and `next.config.js` into `frontend/`.
-
-**0.6 Create root workspace `package.json`**
+**Root `package.json`**:
 ```json
 {
   "name": "ai-marketing-os",
   "private": true,
   "workspaces": ["backend", "frontend"],
-  "scripts": {
-    "dev:api": "npm run dev --workspace=backend",
-    "dev:web": "npm run dev --workspace=frontend",
-    "db:migrate": "npm run prisma:migrate --workspace=backend",
-    "db:seed": "npm run prisma:seed --workspace=backend",
-    "db:studio": "npm run prisma:studio --workspace=backend"
-  }
+  "engines": { "node": ">=20" }
 }
 ```
 
-**0.7 Update `.env.example`**
+### 0.3 Docker Compose
+
+Two services only:
+- `pgvector/pgvector:pg16` — PostgreSQL 16 with pgvector extension
+- `redis:7-alpine` — Redis for BullMQ + session cache
+
+```yaml
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ai_marketing_os
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes: ["redisdata:/data"]
+
+volumes:
+  pgdata:
+  redisdata:
 ```
-NODE_ENV=development
-PORT=3001
 
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_marketing_os
+### 0.4 Backend Scaffold
 
-REDIS_URL=redis://localhost:6379
+```bash
+cd backend
+nest new . --strict --package-manager pnpm
 
-JWT_SECRET=
-JWT_EXPIRATION=15m
-REFRESH_TOKEN_SECRET=
-REFRESH_TOKEN_EXPIRATION=7d
-
-ANTHROPIC_API_KEY=
-CLAUDE_MODEL=claude-sonnet-5-20251001
-
-VOYAGE_API_KEY=
-EMBEDDING_MODEL=voyage-3-lite
-EMBEDDING_DIMENSIONS=1024
-
-FRONTEND_URL=http://localhost:3000
+pnpm add @nestjs/config @nestjs/jwt @nestjs/passport
+pnpm add @prisma/client @anthropic-ai/sdk bullmq ioredis
+pnpm add bcrypt class-validator class-transformer
+pnpm add -D prisma @types/bcrypt typescript@5 ts-jest
 ```
+
+### 0.5 Frontend Scaffold
+
+```bash
+cd frontend
+npx create-next-app@latest . --typescript --tailwind --app --src-dir --import-alias "@/*"
+pnpm add @tanstack/react-query axios zustand
+npx shadcn-ui@latest init
+```
+
+**Deliverables — Phase 0**:
+- [ ] Clean repo (stale docs removed)
+- [ ] `docker-compose.yml` — postgres + redis only
+- [ ] `backend/` — NestJS scaffold with strict TypeScript
+- [ ] `frontend/` — Next.js 15 App Router scaffold
+- [ ] `backend/.env.example` — all variables documented with blank values
+- [ ] `.gitignore` — `.env` listed
 
 ---
 
-## Phase 1 — Backend Foundation (Days 2–4, ~3 days)
+## Phase 0.5 — Agent Engine Foundation
+**Duration**: 2 days  
+**Why before Phase 1**: Every other phase builds on this. Getting the interfaces right first prevents costly rewrites later.
 
-### 1.1 NestJS Project Setup
+### 0.5.1 Prisma Schema + Initial Migration
 
-**`backend/package.json` dependencies**:
+Write the full schema from `DATABASE_DESIGN.md`:
+- All models: Company, User, RefreshToken, CompanyKnowledge, MarketingGoal, Campaign, Task, Conversation, Message, AgentMemory, AgentExecution, ToolCallLog, ApprovalRequest, AgentTask, AuditLog
+- All enums (including PermissionLevel, AgentType, AgentTaskStatus, ApprovalStatus)
+- Run: `prisma migrate dev --name init`
+- Run pgvector index SQL as manual migration file (HNSW — Prisma doesn't support it yet)
+- Run: `prisma generate`
+
+### 0.5.2 AI Provider Interface
+
+```
+backend/src/agent-engine/
+├── agent-engine.module.ts
+├── base/
+│   ├── agent-engine.abstract.ts       ← AgentEngine abstract class
+│   ├── agent-context.types.ts          ← AgentContext, AgentInput, AgentOutput
+│   ├── agent-tool.types.ts             ← CanonicalTool, CanonicalMessage, ToolCallRequest
+│   └── agent-config.types.ts           ← AgentProviderConfig, AgentConfig
+├── providers/
+│   ├── ai-provider.interface.ts        ← AIProvider, EmbeddingProvider interfaces
+│   ├── anthropic.provider.ts           ← AnthropicProvider (first slice)
+│   └── voyage.embedding.provider.ts    ← VoyageEmbeddingProvider (first slice)
+```
+
+`AnthropicProvider` must:
+- Translate `CanonicalMessage[]` → Anthropic `MessageParam[]`
+- Translate `CanonicalTool[]` → Anthropic tool definitions
+- Translate Anthropic response → `CompletionResponse`
+- Handle streaming via SSE
+- Handle extended thinking (pass-through, disabled by default)
+
+### 0.5.3 Memory System
+
+```
+backend/src/agent-engine/memory/
+├── memory-system.service.ts    ← orchestrates all 5 tiers
+├── short-term.memory.ts        ← Tier 1: load last 30 messages
+├── long-term.memory.ts         ← Tier 2: load CompanyKnowledge
+├── semantic.memory.ts          ← Tier 3+4+5: pgvector cosine search
+└── memory.types.ts
+```
+
+`MemorySystem.buildContext(conversationId, userMessage, companyId)` returns full `AgentContext`.
+
+`MemorySystem.store(content, type, companyId)` saves to `agent_memory` and enqueues embedding job.
+
+### 0.5.4 Approval Engine
+
+```
+backend/src/agent-engine/approval/
+├── approval-engine.service.ts  ← gate(), createRequest(), grant(), deny()
+├── approval.types.ts
+└── permission-level.enum.ts    ← READ | WRITE | APPROVAL_REQUIRED | ADMIN_ONLY
+```
+
+`ApprovalEngine.gate(permissionLevel, toolInput, context)`:
+- `READ` → pass-through
+- `WRITE` → pass-through (audit log written after execution)
+- `APPROVAL_REQUIRED` → throw `ApprovalRequiredException` (engine catches, pauses loop)
+- `ADMIN_ONLY` → throw `AdminOnlyException` (engine catches, returns error tool_result)
+
+### 0.5.5 Observability
+
+```
+backend/src/agent-engine/observability/
+├── observability-tracer.service.ts   ← start(), recordToolCall(), finish()
+├── cost-calculator.ts                ← calculateCost(usage, modelId)
+└── execution-log.types.ts
+```
+
+`ObservabilityTracer.finish()` writes `AgentExecution` + all `ToolCallLog` records in one transaction.
+
+### 0.5.6 Orchestration (structurally complete)
+
+```
+backend/src/agent-engine/orchestration/
+├── agent-orchestrator.service.ts   ← delegate() → creates AgentTask, queues BullMQ job
+└── agent-task.types.ts
+```
+
+`AgentOrchestrator.delegate()` creates an `AgentTask` with status `PENDING_AGENT` in the first slice (no target agents exist). This is correct behavior — not a stub, not an error.
+
+### 0.5.7 Agent Engine Abstract Class
+
+`AgentEngine.run()` implements the full agentic loop from `AGENT_DESIGN.md §8`:
+1. Start observability trace
+2. Build AgentContext (all 5 memory tiers)
+3. Build system prompt (via `buildSystemPrompt()`)
+4. Loop: call provider → gate approval → execute tools → append results
+5. Save messages, enqueue memory job, record observability
+6. Return `AgentOutput`
+
+**Deliverables — Phase 0.5**:
+- [ ] `prisma/schema.prisma` — full schema, all models
+- [ ] `prisma/migrations/` — initial migration (SQL)
+- [ ] pgvector HNSW index (manual SQL migration file)
+- [ ] `agent-engine/providers/ai-provider.interface.ts`
+- [ ] `agent-engine/providers/anthropic.provider.ts`
+- [ ] `agent-engine/providers/voyage.embedding.provider.ts`
+- [ ] `agent-engine/memory/memory-system.service.ts` + tier files
+- [ ] `agent-engine/approval/approval-engine.service.ts`
+- [ ] `agent-engine/observability/observability-tracer.service.ts`
+- [ ] `agent-engine/orchestration/agent-orchestrator.service.ts`
+- [ ] `agent-engine/base/agent-engine.abstract.ts` (full loop)
+- [ ] Unit tests: AnthropicProvider translation, MemorySystem context build, ApprovalEngine gating, cost calculation
+
+---
+
+## Phase 1 — Auth, Company, Core API
+**Duration**: 2 days
+
+### 1.1 Auth Module
+
+**Endpoints**:
+- `POST /auth/register` — creates User + Company in one transaction
+- `POST /auth/login` — returns JWT (15m) + refresh token (7d, httpOnly cookie)
+- `POST /auth/refresh` — rotates refresh token, returns new JWT
+- `POST /auth/logout` — revokes refresh token
+
+**Implementation**:
+- Passwords: `bcrypt.hash(password, 12)`
+- JWT: `@nestjs/jwt` with `JWT_SECRET` (min 64 bytes)
+- Refresh tokens: SHA-256 hash stored in `refresh_tokens`; raw token in httpOnly cookie
+- Rate limit: `10 req/min` on all `/auth/*` routes
+- Guard: `JwtAuthGuard` — validates JWT, attaches `{ userId, companyId, role }` to request
+- `companyId` is extracted from JWT on every authenticated request — never from query params
+
+### 1.2 Company Module
+
+**Endpoints**:
+- `GET /company` — current user's company details
+- `PATCH /company` — update name, industry, settings (OWNER/ADMIN only)
+- `GET /company/users` — list company users (ADMIN+)
+- `PATCH /company/users/:id/role` — change user role (OWNER only)
+
+### 1.3 Common Infrastructure
+
+- `JwtAuthGuard` — applies to all routes; extracts `companyId` + `userId` + `role`
+- `RolesGuard` — checks `UserRole` on decorated routes
+- `CompanyInterceptor` — ensures all DB queries include `companyId` from JWT
+- `ValidationPipe` — `whitelist: true, forbidNonWhitelisted: true` globally
+- `GlobalExceptionFilter` — structured error responses, never leaks stack traces
+- `HealthController` — `GET /health` returns 200 + version
+- BullMQ connection — `QueueModule` with Redis config from env
+
+**Deliverables — Phase 1**:
+- [ ] `auth/auth.module.ts`, `auth.controller.ts`, `auth.service.ts`
+- [ ] `auth/strategies/jwt.strategy.ts`, `auth/guards/jwt-auth.guard.ts`
+- [ ] `auth/guards/roles.guard.ts`
+- [ ] `companies/companies.module.ts`, `.controller.ts`, `.service.ts`
+- [ ] `database/prisma.service.ts`
+- [ ] `common/filters/global-exception.filter.ts`
+- [ ] `common/interceptors/company.interceptor.ts`
+- [ ] `scheduler/queue.module.ts` — BullMQ setup
+- [ ] `health/health.controller.ts`
+- [ ] Integration tests: register → login → refresh → logout → protected route
+
+---
+
+## Phase 2 — Marketing Director Agent
+**Duration**: 3 days
+
+### 2.1 Business Services
+
+These services are what agent tools call. They enforce `companyId` isolation and write audit logs.
+
+- `GoalsService`: `list()`, `create()`, `update()`, `findOne()`
+- `CampaignService`: `list()`, `create()`, `update()`, `findOne()`
+- `TaskService`: `list()`, `create()`, `update()`, `findOne()`
+
+Each mutating method:
+1. Verifies the entity belongs to the caller's `companyId`
+2. Executes the DB write in a transaction
+3. Writes an `AuditLog` entry (before/after snapshot on updates)
+
+### 2.2 Director Agent Implementation
+
+```
+backend/src/agents/
+├── agents.module.ts
+└── director/
+    ├── director-agent.service.ts    ← extends AgentEngine
+    ├── director-agent.prompt.ts     ← buildDirectorPrompt(context)
+    └── director-agent.tools.ts      ← 9 CanonicalTool definitions + implementations
+```
+
+Tool implementations call the Application Services from §2.1 — never direct Prisma calls.
+
+### 2.3 Conversations Module
+
+**Endpoints**:
+- `POST /conversations` — create new conversation (returns `conversationId`)
+- `POST /conversations/:id/messages` — send message, returns AgentOutput (or 202 if approval needed)
+- `GET /conversations/:id/stream` — SSE stream for real-time agent output
+- `GET /conversations` — list conversations (paginated)
+- `GET /conversations/:id/messages` — full message history
+
+**SSE streaming**:
+```typescript
+// Stream token chunks as they arrive from AnthropicProvider
+res.setHeader('Content-Type', 'text/event-stream')
+for await (const chunk of provider.stream(request)) {
+  res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+}
+res.write('data: [DONE]\n\n')
+res.end()
+```
+
+### 2.4 Approval HTTP API
+
+- `GET /approvals` — list pending approvals for company (MANAGER+)
+- `POST /approvals/:id/grant` — grant approval (ADMIN+)
+- `POST /approvals/:id/deny` — deny with reason (ADMIN+)
+
+On grant → BullMQ job resumes the agent turn, executes the tool, continues the loop.
+
+### 2.5 Memory Jobs (BullMQ)
+
+```
+backend/src/scheduler/jobs/
+├── embed-memory.job.ts          ← generate embedding for new AgentMemory row
+├── analyze-turn.job.ts          ← post-turn memory extraction
+└── update-memory-scores.job.ts  ← weekly importance decay job
+```
+
+**Deliverables — Phase 2**:
+- [ ] `goals/goals.module.ts`, `.controller.ts`, `.service.ts`
+- [ ] `campaigns/campaigns.module.ts`, `.controller.ts`, `.service.ts`
+- [ ] `tasks/tasks.module.ts`, `.controller.ts`, `.service.ts`
+- [ ] `agents/director/director-agent.service.ts`
+- [ ] `agents/director/director-agent.prompt.ts`
+- [ ] `agents/director/director-agent.tools.ts` (all 9 tools implemented)
+- [ ] `conversations/conversations.module.ts`, `.controller.ts`, `.service.ts`
+- [ ] `conversations/sse-stream.ts`
+- [ ] `approval/approval.controller.ts` (list, grant, deny endpoints)
+- [ ] BullMQ job processors: embed-memory, analyze-turn, weekly-decay
+- [ ] End-to-end test: send message → agent uses tools → creates campaign → SSE stream
+
+---
+
+## Phase 3 — Frontend Dashboard
+**Duration**: 2 days
+
+### 3.1 Pages
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/login` | `LoginPage` | Email + password form |
+| `/register` | `RegisterPage` | Company name + user info |
+| `/` | `DashboardPage` | Goal summaries, active campaigns, recent activity |
+| `/chat` | `ChatPage` | New conversation |
+| `/chat/[id]` | `ChatPage` | Existing conversation |
+| `/goals` | `GoalsPage` | Goal list, progress |
+| `/campaigns` | `CampaignsPage` | Campaign list + status |
+| `/campaigns/[id]` | `CampaignDetailPage` | Tasks, brief, progress |
+| `/approvals` | `ApprovalsPage` | Pending approval inbox |
+
+### 3.2 Chat Interface
+
+- **Message list** — renders USER, ASSISTANT, TOOL_CALL, TOOL_RESULT messages
+- **Tool call display** — collapsible card: tool name, input summary, result
+- **Approval prompt** — inline card when agent hits APPROVAL_REQUIRED gate
+- **SSE integration** — connects to `/conversations/:id/stream`, renders tokens as they arrive
+- **Input** — textarea + send button; disabled while agent is responding
+
+### 3.3 State Management
+
+- **TanStack Query** — server state (conversations, campaigns, goals)
+- **Zustand** — UI state (active conversation, pending approvals count)
+- **Axios** — HTTP client with JWT interceptor (auto-refresh on 401)
+
+### 3.4 Auth Flow
+
+- Login → store JWT in memory (not localStorage); refresh token in httpOnly cookie
+- Axios interceptor: on 401, call `/auth/refresh`, retry original request once
+- On logout: call `/auth/logout`, clear in-memory JWT, redirect to `/login`
+
+**Deliverables — Phase 3**:
+- [ ] `app/(auth)/login/page.tsx` + form
+- [ ] `app/(auth)/register/page.tsx` + form
+- [ ] `app/(dashboard)/layout.tsx` — sidebar navigation
+- [ ] `app/(dashboard)/page.tsx` — dashboard overview
+- [ ] `app/(dashboard)/chat/[id]/page.tsx` — agent chat
+- [ ] `components/chat/message-list.tsx`
+- [ ] `components/chat/message-input.tsx`
+- [ ] `components/chat/tool-call-display.tsx`
+- [ ] `components/chat/approval-prompt.tsx`
+- [ ] `app/(dashboard)/goals/page.tsx`
+- [ ] `app/(dashboard)/campaigns/page.tsx`
+- [ ] `app/(dashboard)/campaigns/[id]/page.tsx`
+- [ ] `app/(dashboard)/approvals/page.tsx`
+- [ ] `lib/api.ts` — Axios instance + JWT interceptor
+- [ ] `hooks/useSSE.ts` — SSE connection hook
+- [ ] `store/auth.store.ts` — Zustand auth state
+
+---
+
+## Phase 4 — Integration, Polish, Seed
+**Duration**: 2 days
+
+### 4.1 Seed Data
+
+Real seed that creates a usable demo:
+```
+Demo Company (B2B SaaS)
+├── Owner user: demo@example.com / Demo123!@#
+├── Company Knowledge:
+│   ├── ICP: VP of Operations, 50-200 person B2B SaaS
+│   └── Budget: $5,000/month
+├── Marketing Goal: Increase Brand Awareness Q1 2026
+└── Campaign: LinkedIn Thought Leadership (DRAFT)
+    └── Task: Write 4 articles on industry trends (human, HIGH priority)
+```
+
+### 4.2 End-to-End Validation Checklist
+
+Manual test script — must pass before milestone is declared complete:
+
+1. [ ] Register company + user
+2. [ ] Login → JWT in memory, refresh token in httpOnly cookie
+3. [ ] Start conversation with Director Agent
+4. [ ] Ask agent to create a goal → verify DB row + audit log
+5. [ ] Ask agent to create a campaign under the goal → verify DB row + audit log
+6. [ ] Ask agent to create 3 tasks → verify DB rows
+7. [ ] Verify `agent_executions` row exists (token count, cost, latency)
+8. [ ] Verify `tool_call_logs` rows (one per tool call)
+9. [ ] Verify `agent_memory` rows after analysis job runs
+10. [ ] Verify SSE stream delivers tokens in real-time
+11. [ ] Trigger an approval flow (manually set a tool to APPROVAL_REQUIRED in dev config)
+12. [ ] Verify ApprovalRequest created, SSE notifies frontend
+13. [ ] Grant approval → verify tool executed, agent continued
+14. [ ] Verify cross-tenant access returns 403
+
+### 4.3 Error Scenario Validation
+
+- [ ] Wrong credentials → 401, not 500
+- [ ] Cross-tenant access attempt → 403 (companyId mismatch)
+- [ ] AI provider timeout → partial response + BullMQ retry queued
+- [ ] Embedding API down → memory saved without embedding, retrieval degrades gracefully
+- [ ] Database write failure → transaction rollback, error returned to agent
+
+**Deliverables — Phase 4**:
+- [ ] `prisma/seed.ts` — company, user, knowledge, goal, campaign, tasks
+- [ ] `docker-compose.yml` — verified working locally
+- [ ] `backend/README.md` — setup: Docker → migrate → seed → run
+- [ ] `frontend/README.md` — setup instructions
+- [ ] End-to-end manual test checklist: all 14 items verified
+- [ ] Error scenario test results documented
+
+---
+
+## Package Summary
+
+### Backend
+
 ```json
 {
   "dependencies": {
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
-    "@nestjs/platform-express": "^11",
     "@nestjs/config": "^3",
-    "@nestjs/passport": "^10",
     "@nestjs/jwt": "^10",
-    "@nestjs/throttler": "^6",
-    "@nestjs/bull": "^10",
-    "@anthropic-ai/sdk": "^0.30",
+    "@nestjs/passport": "^10",
+    "@nestjs/platform-express": "^11",
     "@prisma/client": "^6",
-    "passport": "^0.7",
-    "passport-jwt": "^4",
-    "passport-local": "^1",
+    "@anthropic-ai/sdk": "^0.36",
+    "bullmq": "^5",
+    "ioredis": "^5",
     "bcrypt": "^5",
     "class-validator": "^0.14",
     "class-transformer": "^0.5",
-    "bull": "^4",
-    "ioredis": "^5",
-    "reflect-metadata": "^0.2",
-    "rxjs": "^7"
+    "passport-jwt": "^4",
+    "uuid": "^10"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11",
-    "@nestjs/testing": "^11",
-    "@types/bcrypt": "^5",
-    "@types/passport-jwt": "^4",
-    "@types/passport-local": "^1",
     "prisma": "^6",
-    "typescript": "^5.5",
-    "ts-node": "^10",
-    "@types/node": "^20",
-    "jest": "^29",
-    "@types/jest": "^29",
+    "@types/bcrypt": "^5",
+    "@types/express": "^5",
+    "typescript": "^5",
     "ts-jest": "^29",
-    "supertest": "^7",
-    "@types/supertest": "^6"
+    "@nestjs/testing": "^11"
   }
 }
 ```
 
-**`backend/tsconfig.json`**: Strict TypeScript with NestJS decorators enabled (same settings as existing root tsconfig.json — copy with `rootDir: src`).
+Voyage AI: use `axios` to call their REST API directly (no SDK dependency needed).
 
-### 1.2 Database Setup
+### Frontend
 
-- Write `backend/prisma/schema.prisma` (exact schema from DATABASE_DESIGN.md)
-- Run: `npx prisma migrate dev --name init`
-- Verify pgvector extension is active: `SELECT * FROM pg_extension WHERE extname = 'vector';`
-- Create HNSW index (raw SQL migration after schema migration)
-- Write `backend/prisma/seed.ts` with demo company + user
-
-### 1.3 Core NestJS Modules
-
-**Order of implementation** (each depends on the previous):
-
-1. **`database/`** — PrismaService (extends PrismaClient, adds onModuleInit + enableShutdownHooks)
-2. **`common/`** — AllExceptionsFilter, TransformInterceptor, ValidationPipe setup, CurrentUser decorator
-3. **`auth/`** — Register + Login + Refresh endpoints, JWT strategy, bcrypt
-4. **`companies/`** — GET + PATCH /companies/:id (update settings, name, etc.)
-5. **`users/`** — GET /users/me, PATCH /users/me (profile update)
-6. **`goals/`** — Full CRUD for MarketingGoal
-7. **`campaigns/`** — Full CRUD for Campaign
-8. **`tasks/`** — Full CRUD for Task
-9. **`memory/`** — MemoryService (write with embedding, read with similarity search)
-10. **`agents/`** — BaseAgentService, DirectorAgentService, tools execution
-11. **`conversations/`** — Conversation CRUD + message handling + SSE streaming
-
-### 1.4 Auth Module Detail
-
-**Register flow**:
-```
-POST /api/v1/auth/register
-Body: { email, password, firstName, lastName, companyName }
-
-1. Validate DTO (email format, password strength: min 8 chars, 1 upper, 1 number, 1 special)
-2. Check email not already registered
-3. Create Company (slug = slugify(companyName))
-4. Create User (role: OWNER, passwordHash = bcrypt(password, 12))
-5. Generate access token + refresh token
-6. Store refresh token hash in DB
-7. Return { accessToken, refreshToken, user: { id, email, firstName, lastName, role }, company }
-```
-
-**Password validation rule**: minimum 8 characters, at least one uppercase, one number, one special character. Applied in DTO using `@Matches()`.
-
-**JWT payload**: `{ sub: userId, companyId, role, iat, exp }`
-
-### 1.5 Conversations + Agent Module Detail
-
-```
-POST /api/v1/conversations
-→ Create a new conversation record, return { id, title: null, createdAt }
-
-POST /api/v1/conversations/:id/messages
-Body: { content: string }
-→ 1. Save user message to DB
-→ 2. Invoke DirectorAgentService.run(conversationId, content, companyContext)
-→ 3. Agent loop (see AGENT_DESIGN.md §5)
-→ 4. Save assistant message(s) + tool call records to DB
-→ 5. Queue memory storage job (BullMQ)
-→ 6. Return { message: assistantText, toolCallsExecuted, tokensUsed }
-
-GET /api/v1/conversations/:id/messages
-→ Return paginated message list
-
-GET /api/v1/conversations
-→ Return list of conversations for current user
-
-SSE: GET /api/v1/conversations/:id/stream
-→ Streams token-by-token as agent generates response
-→ Emits: { type: 'token', content: '...' }
-→ Emits: { type: 'tool_start', tool: 'create_campaign', input: {...} }
-→ Emits: { type: 'tool_end', tool: 'create_campaign', result: {...} }
-→ Emits: { type: 'done', tokensUsed: {...} }
-```
-
-### 1.6 API Response Format
-
-All success responses:
 ```json
 {
-  "data": { ... },
-  "meta": { "pagination": { "page": 1, "limit": 20, "total": 45 } }
-}
-```
-
-All error responses:
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Validation failed",
-    "details": [{ "field": "email", "message": "Invalid email format" }]
-  },
-  "timestamp": "2026-08-24T10:00:00Z",
-  "path": "/api/v1/auth/register"
-}
-```
-
----
-
-## Phase 2 — Frontend (Days 5–8, ~4 days)
-
-### 2.1 Project Setup
-
-Next.js 15, App Router, TypeScript, Tailwind, shadcn/ui.
-
-Install shadcn/ui components needed:
-```bash
-npx shadcn@latest init
-npx shadcn@latest add button input label card badge separator avatar dropdown-menu sheet tabs scroll-area textarea toast
-```
-
-Install additional frontend packages:
-```
-zustand          ← state management
-@tanstack/react-query  ← server state / data fetching
-axios            ← HTTP client
-date-fns         ← date formatting
-lucide-react     ← icons (included with shadcn)
-```
-
-### 2.2 Pages to Build
-
-**Auth pages** (`/login`, `/register`):
-- Email + password form
-- Error display
-- Redirect to `/` on success
-- Store access token in `localStorage` (with clear security note: httpOnly cookies preferred for production hardening)
-
-**Dashboard layout** (`/layout.tsx`):
-- Left sidebar: logo, nav links (Overview, Chat, Goals, Campaigns)
-- Top bar: company name, user menu (profile, logout)
-- Content area
-
-**Overview page** (`/`):
-- Summary cards: Active Goals, Active Campaigns, Pending Tasks
-- Recent conversations list (click to open)
-- "Start a conversation" CTA if no conversations yet
-
-**Chat page** (`/chat` and `/chat/[id]`):
-- Message list with user/assistant distinction
-- Tool call display (collapsible — shows what tool was called and what it created)
-- Text input with send button
-- Auto-scroll to latest message
-- SSE stream integration (shows typing indicator while agent responds)
-- Sidebar listing all past conversations
-
-**Goals page** (`/goals`):
-- List of marketing goals with status badge
-- Click to see campaigns linked to each goal
-
-**Campaigns page** (`/campaigns`):
-- List of campaigns with status, channel badges, date range
-- Click campaign to see task list
-- Task list with status, priority, assignee type
-
-### 2.3 API Client
-
-```typescript
-// frontend/lib/api-client.ts
-const client = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL });
-
-// Attach access token to every request
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// Handle token expiry: refresh and retry once
-client.interceptors.response.use(
-  (res) => res,
-  async (error) => {
-    if (error.response?.status === 401 && !error.config._retry) {
-      error.config._retry = true;
-      const newToken = await refreshAccessToken();
-      error.config.headers.Authorization = `Bearer ${newToken}`;
-      return client(error.config);
-    }
-    return Promise.reject(error);
+  "dependencies": {
+    "next": "15",
+    "react": "19",
+    "react-dom": "19",
+    "@tanstack/react-query": "^5",
+    "axios": "^1",
+    "zustand": "^5",
+    "tailwindcss": "^3",
+    "clsx": "^2",
+    "lucide-react": "latest"
   }
-);
-```
-
-### 2.4 Chat SSE Integration
-
-```typescript
-// frontend/hooks/use-conversation-stream.ts
-function useConversationStream(conversationId: string) {
-  const [streaming, setStreaming] = useState(false);
-  const [partialMessage, setPartialMessage] = useState('');
-  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
-
-  const sendMessage = async (content: string) => {
-    setStreaming(true);
-    setPartialMessage('');
-    setToolCalls([]);
-
-    const token = localStorage.getItem('access_token');
-    const url = `${API_URL}/conversations/${conversationId}/stream`;
-    
-    // POST with content, then connect to SSE
-    await client.post(`/conversations/${conversationId}/messages`, { content });
-    
-    const eventSource = new EventSource(`${url}?token=${token}`);
-    
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'token') setPartialMessage(p => p + data.content);
-      if (data.type === 'tool_start') setToolCalls(t => [...t, data]);
-      if (data.type === 'done') {
-        setStreaming(false);
-        eventSource.close();
-        onComplete(); // refresh message list
-      }
-    };
-  };
-
-  return { sendMessage, streaming, partialMessage, toolCalls };
 }
 ```
 
 ---
 
-## Phase 3 — Integration & Testing (Days 9–11, ~3 days)
+## Timeline Summary
 
-### 3.1 End-to-End Test Scenarios
+| Phase | Focus | Days | Cumulative |
+|-------|-------|------|-----------|
+| Pre-impl | Security credential rotation | Day 0 | Day 0 |
+| 0 | Repo cleanup, scaffolding, Docker | Day 1 | Day 1 |
+| 0.5 | Agent Engine (providers, memory, approval, observability) | Days 2–3 | Day 3 |
+| 1 | Auth, Company, core API infrastructure | Days 4–5 | Day 5 |
+| 2 | Director Agent, conversations, tools, BullMQ jobs | Days 6–8 | Day 8 |
+| 3 | Frontend dashboard, chat UI, approvals inbox | Days 9–10 | Day 10 |
+| 4 | Integration, seed, validation, documentation | Days 11–12 | Day 12 |
 
-These must all work before the milestone is considered done:
-
-**Scenario A — New User Flow**:
-1. Register with email/password/company name → receives JWT
-2. Redirected to dashboard — sees empty state
-3. Opens Chat → starts conversation
-4. Sends: "We need to launch a new product in Q1. It's a B2B SaaS tool for logistics teams."
-5. Agent asks 1-2 clarifying questions
-6. User answers
-7. Agent creates: 1 MarketingGoal + 1 Campaign + 3-5 Tasks in DB
-8. Dashboard updates: shows the new goal and campaign
-9. Refresh page → conversation history preserved, goal still visible
-
-**Scenario B — Returning User**:
-1. Login with existing credentials
-2. Past conversations appear in sidebar
-3. Click a past conversation → full history loads
-4. Send a new message that references past context
-5. Agent recalls previous context from conversation history
-6. Agent uses `search_memory` → retrieves relevant past memories
-
-**Scenario C — Token Refresh**:
-1. Access token expires (15 min or simulate with short TTL)
-2. Next API request automatically refreshes the token
-3. User does not see an error or a redirect
-
-### 3.2 API Tests to Write
-
-```
-auth.e2e-spec.ts:
-  POST /auth/register → 201 with tokens
-  POST /auth/register (duplicate email) → 409
-  POST /auth/login (wrong password) → 401
-  POST /auth/login (valid) → 200 with tokens
-  GET /auth/me (no token) → 401
-  GET /auth/me (valid token) → 200 with user data
-  POST /auth/refresh (valid) → 200 with new tokens
-  POST /auth/refresh (revoked) → 401
-
-conversations.e2e-spec.ts:
-  POST /conversations → 201 with conversation
-  POST /conversations/:id/messages → 200 with agent response
-  GET /conversations/:id/messages → 200 with message list
-  Agent creates campaign → campaign exists in DB after tool call
-```
-
-### 3.3 Manual QA Checklist
-
-- [ ] Register flow works end-to-end
-- [ ] Login flow works end-to-end
-- [ ] Logout clears tokens and redirects to login
-- [ ] Invalid credentials show correct error messages
-- [ ] Chat sends message, agent responds within 15 seconds
-- [ ] Tool calls are visibly logged in chat UI
-- [ ] Created campaigns appear on Campaigns page without page reload
-- [ ] Conversation history loads on page refresh
-- [ ] Memory is stored after conversation (verify in DB)
-- [ ] Rate limiter triggers after 10 rapid auth requests
-- [ ] Wrong company data cannot be accessed (test with two accounts)
+**Total**: 12 working days to a functional, production-ready first vertical slice.
 
 ---
 
-## Phase 4 — Hardening & Deploy Prep (Day 12, ~1 day)
+## Definition of Done (First Slice)
 
-### 4.1 Security Hardening
+The first slice is complete when all of the following are true:
 
-- [ ] Verify no `passwordHash` ever appears in API responses (add global response interceptor that strips it)
-- [ ] Verify refresh tokens are stored hashed, raw value never logged
-- [ ] Add helmet middleware (NestJS: `app.use(helmet())`)
-- [ ] Verify CORS allows only `FRONTEND_URL`
-- [ ] Add rate limiting: 100 req/15min global, 10/min on `/auth/*`
-- [ ] Verify all endpoints require auth except `/auth/login`, `/auth/register`, `/health`
-- [ ] Test that companyId scoping prevents cross-tenant reads
-
-### 4.2 Observability
-
-- [ ] Request logging: method, path, status, duration (logging interceptor)
-- [ ] Error logging: stack trace in non-production environments only
-- [ ] Agent turn logging: `{ conversationId, inputTokens, outputTokens, toolCalls, durationMs }`
-- [ ] Health check endpoint: `GET /health` → `{ status: "ok", db: "connected", redis: "connected" }`
-
-### 4.3 Docker Compose Final State
-
-After cleanup, `docker-compose.yml` should start the full dev environment:
-```
-postgres (pgvector/pgvector:pg16) → port 5432
-redis (redis:7-alpine) → port 6379
-```
-
-Backend and frontend run locally (not in Docker) for fast hot reload. Add `docker-compose.prod.yml` for production builds later.
-
----
-
-## File Delivery Checklist
-
-By the end of this milestone, these files must exist and be functional:
-
-**Backend**:
-- [ ] `backend/prisma/schema.prisma`
-- [ ] `backend/prisma/migrations/` (at least init migration)
-- [ ] `backend/prisma/seed.ts`
-- [ ] `backend/src/main.ts`
-- [ ] `backend/src/app.module.ts`
-- [ ] `backend/src/auth/` (complete)
-- [ ] `backend/src/companies/` (complete)
-- [ ] `backend/src/users/` (complete)
-- [ ] `backend/src/goals/` (complete)
-- [ ] `backend/src/campaigns/` (complete)
-- [ ] `backend/src/tasks/` (complete)
-- [ ] `backend/src/conversations/` (complete)
-- [ ] `backend/src/agents/director/` (complete)
-- [ ] `backend/src/agents/memory/` (complete)
-- [ ] `backend/src/database/` (complete)
-- [ ] `backend/src/common/` (filters, interceptors, decorators)
-- [ ] `backend/test/auth.e2e-spec.ts`
-- [ ] `backend/test/conversations.e2e-spec.ts`
-- [ ] `backend/.env.example`
-- [ ] `backend/package.json`
-- [ ] `backend/tsconfig.json`
-
-**Frontend**:
-- [ ] `frontend/src/app/(auth)/login/page.tsx`
-- [ ] `frontend/src/app/(auth)/register/page.tsx`
-- [ ] `frontend/src/app/(dashboard)/layout.tsx`
-- [ ] `frontend/src/app/(dashboard)/page.tsx`
-- [ ] `frontend/src/app/(dashboard)/chat/page.tsx`
-- [ ] `frontend/src/app/(dashboard)/chat/[id]/page.tsx`
-- [ ] `frontend/src/app/(dashboard)/goals/page.tsx`
-- [ ] `frontend/src/app/(dashboard)/campaigns/page.tsx`
-- [ ] `frontend/src/app/(dashboard)/campaigns/[id]/page.tsx`
-- [ ] `frontend/src/components/chat/` (message-list, input, tool-call-display)
-- [ ] `frontend/src/components/layout/` (sidebar, topbar)
-- [ ] `frontend/src/lib/api-client.ts`
-- [ ] `frontend/src/hooks/use-auth.ts`
-- [ ] `frontend/src/hooks/use-conversation-stream.ts`
-- [ ] `frontend/src/store/auth.store.ts`
-- [ ] `frontend/package.json`
-- [ ] `frontend/next.config.js`
-- [ ] `frontend/tailwind.config.ts`
-
-**Root**:
-- [ ] `docker-compose.yml` (cleaned)
-- [ ] `package.json` (workspace root)
-- [ ] `.env.example` (updated)
-- [ ] `ARCHITECTURE.md` ✅
-- [ ] `DATABASE_DESIGN.md` ✅
-- [ ] `AGENT_DESIGN.md` ✅
-- [ ] `IMPLEMENTATION_PLAN.md` ✅
-
----
-
-## Estimated Timeline
-
-| Phase | Duration | Output |
-|-------|----------|--------|
-| 0 — Repo Setup | Day 1 (2h) | Clean repo, Docker, project init |
-| 1 — Backend | Days 2–4 (3 days) | All API endpoints working |
-| 2 — Frontend | Days 5–8 (4 days) | Full UI, chat working end-to-end |
-| 3 — Integration | Days 9–11 (3 days) | E2E tests passing, QA complete |
-| 4 — Hardening | Day 12 (1 day) | Security + observability baseline |
-| **Total** | **~12 working days** | **First vertical slice done** |
-
-This assumes one developer working full time. Parallel frontend/backend development with two developers could compress to 7–8 days.
+- [ ] A new user can register a company and log in
+- [ ] JWT auth works with refresh token rotation
+- [ ] The Marketing Director Agent holds a real multi-turn conversation with memory
+- [ ] The agent creates real goals, campaigns, and tasks in the database
+- [ ] Every agent turn writes to `agent_executions` and `tool_call_logs`
+- [ ] Token usage and cost are tracked per conversation
+- [ ] SSE streaming delivers agent output token-by-token to the browser
+- [ ] Approval Engine is wired in (even if no tools currently require it)
+- [ ] All 5 memory tiers are injected into each agent turn
+- [ ] The frontend shows chat, goals list, campaign list, and approvals inbox
+- [ ] All data is isolated by `companyId` — no cross-tenant access possible
+- [ ] No credentials committed to git
+- [ ] `docker compose up && pnpm prisma migrate dev && pnpm prisma db seed` produces a working local environment

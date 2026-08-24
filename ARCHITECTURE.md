@@ -1,321 +1,738 @@
 # AI Marketing OS — Architecture
 
-**Version**: 1.0  
+**Version**: 2.0  
 **Status**: Design (awaiting approval)  
-**Scope**: Full system design; first vertical slice is Marketing Director Agent end-to-end
+**Revised**: Added AI Provider abstraction, Agent Engine, Approval Engine, Orchestration, Event system, Observability
 
 ---
 
 ## 1. Product Vision
 
-AI Marketing OS is a multi-tenant SaaS platform where a company's marketing work is driven by a team of specialized AI agents. Each agent has domain expertise, access to the company's knowledge base, and the ability to create real artifacts (campaigns, tasks, content briefs). Humans stay in control through an approval workflow — agents propose, humans decide, agents execute.
+AI Marketing OS is a multi-tenant SaaS platform where a company's marketing work is driven by a team of specialized AI agents. Each agent is built on a shared, provider-agnostic Agent Engine — so the infrastructure that powers the Marketing Director Agent also powers every future agent (Strategy, Research, Content, Social, Performance, Analytics, Creative). Agents propose actions, the Approval Engine controls what they can execute autonomously, and humans stay in control of sensitive decisions.
 
-The first milestone delivers one agent end-to-end: the **Marketing Director Agent**, which conducts a persistent conversation with the user, understands the company's marketing goals, and creates campaigns and tasks backed by a real database.
+**First milestone**: Marketing Director Agent, end-to-end, with real data.
 
 ---
 
-## 2. System Overview
+## 2. Architectural Layers
+
+The system is strictly layered. No layer may skip a layer below it — data always flows through the defined boundaries.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  LAYER 1: PRESENTATION                                               │
+│  Next.js 15 · Chat UI · Dashboard · Approval Inbox · Goals/Campaigns│
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ REST + SSE
+┌───────────────────────────────▼─────────────────────────────────────┐
+│  LAYER 2: API (NestJS Controllers)                                   │
+│  Request validation · Auth guards · DTO transformation · Rate limit  │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────────┐
+│  LAYER 3: APPLICATION SERVICES                                       │
+│  GoalsService · CampaignService · TaskService · ConversationService  │
+│  CompanyService · UserService · AuthService                          │
+└───────────┬───────────────────┬─────────────────────────────────────┘
+            │                   │
+┌───────────▼────────┐ ┌───────▼──────────────────────────────────────┐
+│  LAYER 4: AGENT    │ │  LAYER 5: TOOLS                               │
+│  ENGINE            │ │  AgentTool implementations                    │
+│                    │ │  Each tool calls Application Services only    │
+│  AgentEngine       │ │  (never direct DB access)                    │
+│  MemorySystem      │ └───────────────────────────────────────────────┘
+│  ApprovalEngine    │
+│  Orchestrator      │
+└───────────┬────────┘
+            │
+┌───────────▼────────────────────────────────────────────────────────┐
+│  LAYER 6: AI PROVIDER                                               │
+│  AIProvider interface · AnthropicProvider · OpenAIProvider (future) │
+│  EmbeddingProvider interface · VoyageProvider · OpenAIEmbedding     │
+└────────────────────────────────────────────────────────────────────┘
+            │
+┌───────────▼────────────────────────────────────────────────────────┐
+│  LAYER 7: DATA                                                       │
+│  Prisma ORM · PostgreSQL 16 + pgvector · Redis                      │
+└────────────────────────────────────────────────────────────────────┘
+            │
+┌───────────▼────────────────────────────────────────────────────────┐
+│  LAYER 8: EXTERNAL INTEGRATIONS (future)                            │
+│  Meta Ads · Google Ads · Instagram · Mailchimp · Stripe              │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Cross-cutting concerns** (touch every layer):
+- **Event Bus** (BullMQ): decoupled communication between layers
+- **Observability** (execution logs, token usage, cost, latency, errors)
+- **Audit Log** (immutable record of every mutation and agent action)
+
+---
+
+## 3. System Component Diagram
+
+```
+Browser
+  │
+  │ HTTPS
+  ▼
+NestJS API (:3001)
+  ├── Auth Module
+  ├── Companies Module
+  ├── Conversations Module ──────────────────┐
+  ├── Goals Module                           │
+  ├── Campaigns Module                       │
+  ├── Tasks Module                           │
+  ├── Approval Module                        │
+  └── Observability Module                   │
+                                             │
+                              ┌──────────────▼──────────────┐
+                              │       AGENT ENGINE           │
+                              │                              │
+                              │  ┌────────────────────────┐ │
+                              │  │  MarketingDirectorAgent │ │
+                              │  │  (AgentEngine impl.)    │ │
+                              │  └──────────┬─────────────┘ │
+                              │             │                │
+                              │  ┌──────────▼─────────────┐ │
+                              │  │   Agentic Loop          │ │
+                              │  │   ToolRouter            │ │
+                              │  │   ApprovalGate          │ │
+                              │  │   MemoryContext          │ │
+                              │  │   ObservabilityTracer   │ │
+                              │  └──────────┬─────────────┘ │
+                              └─────────────┼───────────────┘
+                                            │
+               ┌────────────────────────────┼────────────────────────┐
+               │                            │                        │
+    ┌──────────▼──────────┐  ┌─────────────▼──────┐  ┌────────────▼──────────┐
+    │    AI PROVIDER       │  │   MEMORY SYSTEM     │  │   APPROVAL ENGINE     │
+    │                      │  │                     │  │                       │
+    │  AIProvider          │  │  ShortTermMemory    │  │  ApprovalRequest      │
+    │  interface           │  │  LongTermCompany    │  │  PermissionLevel      │
+    │                      │  │  CampaignInsights   │  │  HumanApprovalWait    │
+    │  AnthropicProvider   │  │  LearnedPreferences │  │  ApprovalNotifier     │
+    │  (+ future providers)│  │  SemanticIndex      │  │                       │
+    └──────────────────────┘  └─────────────────────┘  └───────────────────────┘
+               │                            │
+               │                  ┌─────────▼────────────────────────────┐
+               │                  │   ORCHESTRATION LAYER                │
+               │                  │   AgentOrchestrator                  │
+               │                  │   AgentTaskQueue (BullMQ)            │
+               │                  │   (Director delegates → future agents)│
+               │                  └──────────────────────────────────────┘
+               │
+    ┌──────────▼──────────────────────────────────────────────────────────┐
+    │   POSTGRESQL 16 + pgvector          REDIS           BULLMQ          │
+    │   (Prisma ORM)                      (cache+sessions) (queues+jobs)   │
+    └─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. AI Provider Abstraction
+
+The system never calls Anthropic (or any LLM) directly from the Agent Engine. All AI calls go through a provider interface. Swapping the underlying model requires only a config change.
+
+### 4.1 Provider Interface
+
+```typescript
+// packages/agent-engine/src/providers/ai-provider.interface.ts
+
+interface CompletionRequest {
+  messages: CanonicalMessage[]    // provider-agnostic message format
+  tools?: CanonicalTool[]         // provider-agnostic tool definitions
+  systemPrompt?: string
+  maxTokens?: number
+  temperature?: number
+  stream?: boolean
+  thinkingEnabled?: boolean       // extended reasoning (Anthropic only, no-op elsewhere)
+}
+
+interface CompletionResponse {
+  content: string | null
+  toolCalls: ToolCallRequest[]
+  stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'error'
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+  }
+}
+
+interface AIProvider {
+  readonly providerId: string         // 'anthropic' | 'openai' | 'gemini'
+  readonly modelId: string            // 'claude-sonnet-5-20251001' | 'gpt-4o' | etc.
+  readonly contextWindow: number
+  readonly supportsToolUse: boolean
+  readonly supportsStreaming: boolean
+
+  complete(request: CompletionRequest): Promise<CompletionResponse>
+  stream(request: CompletionRequest): AsyncIterable<CompletionChunk>
+}
+
+interface EmbeddingProvider {
+  readonly providerId: string
+  readonly dimensions: number
+  embed(texts: string[]): Promise<number[][]>
+}
+```
+
+### 4.2 Canonical Message and Tool Format
+
+```typescript
+// Provider-agnostic — each provider adapter translates to its own format
+interface CanonicalMessage {
+  role: 'user' | 'assistant' | 'tool_result'
+  content: string | CanonicalContentBlock[]
+}
+
+interface CanonicalTool {
+  name: string
+  description: string
+  inputSchema: JsonSchema       // JSON Schema object — all providers accept this
+  permissionLevel: PermissionLevel  // READ | WRITE | APPROVAL_REQUIRED | ADMIN_ONLY
+}
+```
+
+### 4.3 Provider Implementations (Day 1 → Future)
+
+| Provider | Status | Used For |
+|----------|--------|----------|
+| `AnthropicProvider` | **First slice** | All agents — claude-sonnet-5 |
+| `OpenAIProvider` | Future | Alternative if cost/capability demands |
+| `GeminiProvider` | Future | Alternative or multimodal tasks |
+| `VoyageEmbeddingProvider` | **First slice** | Memory embeddings |
+| `OpenAIEmbeddingProvider` | Future | Alternative embeddings |
+| `LocalEmbeddingProvider` | Dev fallback | Offline dev without API key |
+
+### 4.4 Provider Configuration
+
+```typescript
+// Configured per-agent in environment or admin settings
+interface AgentProviderConfig {
+  completionProvider: 'anthropic' | 'openai' | 'gemini'
+  completionModel: string
+  embeddingProvider: 'voyage' | 'openai' | 'local'
+  embeddingModel: string
+  maxTokensPerTurn: number
+  enableExtendedThinking: boolean
+}
+```
+
+---
+
+## 5. Agent Engine
+
+The Agent Engine is a reusable, provider-agnostic framework. Every agent — Director, Strategy, Content, Research, Social, Performance, Analytics, Creative — is implemented by extending `AgentEngine`. The engine handles the agentic loop, memory injection, approval gating, observability, and orchestration. Individual agents only define their persona and tools.
+
+### 5.1 AgentEngine Abstract Class
+
+```typescript
+abstract class AgentEngine {
+  constructor(
+    protected provider: AIProvider,
+    protected memory: MemorySystem,
+    protected approvalEngine: ApprovalEngine,
+    protected orchestrator: AgentOrchestrator,
+    protected observability: ObservabilityTracer,
+    protected config: AgentConfig,
+  ) {}
+
+  // Every agent implements these three
+  abstract getAgentType(): AgentType
+  abstract buildSystemPrompt(context: AgentContext): string
+  abstract defineTools(): CanonicalTool[]
+
+  // Engine handles the rest
+  async run(input: AgentInput): Promise<AgentOutput>
+  private async executeToolCall(call: ToolCallRequest, context: AgentContext): Promise<ToolResult>
+  private async gatePermission(tool: CanonicalTool, input: unknown, context: AgentContext): Promise<void>
+  private async buildContext(conversationId: string, userMessage: string, companyId: string): Promise<AgentContext>
+}
+```
+
+### 5.2 Agentic Loop (Engine-managed)
+
+```
+run(input):
+  1. Start observability trace
+  2. Build AgentContext:
+     a. Load conversation history (SHORT_TERM memory)
+     b. Retrieve semantic memories (LONG_TERM + INSIGHTS + PREFERENCES)
+     c. Load structured context (company, goals, active campaigns)
+  3. Build system prompt (delegated to concrete agent)
+  4. LOOP:
+     a. Call AIProvider.complete()
+     b. If stop_reason == end_turn → finalize, break
+     c. If stop_reason == tool_use:
+        i.   For each tool call:
+             - Check PermissionLevel via ApprovalEngine
+             - If APPROVAL_REQUIRED → create ApprovalRequest, pause, return partial response
+             - If READ/WRITE → execute tool
+             - Append tool_result
+     d. Append assistant + tool_results to message array
+     e. Continue loop (max 10 iterations, configurable)
+  5. Save assistant message to DB
+  6. Enqueue memory storage job (async, non-blocking)
+  7. Record observability: tokens, cost, latency, tool calls, errors
+  8. Return AgentOutput
+```
+
+### 5.3 First Slice Agent: MarketingDirectorAgent
+
+```typescript
+class MarketingDirectorAgent extends AgentEngine {
+  getAgentType() { return AgentType.DIRECTOR }
+
+  buildSystemPrompt(context: AgentContext): string {
+    // Injects: companyContext, goals, campaigns, memories
+    // Persona: senior marketing director, structured, commercially minded
+    // See AGENT_DESIGN.md for full prompt template
+  }
+
+  defineTools(): CanonicalTool[] {
+    return [
+      listGoalsTool,        // READ
+      createGoalTool,       // WRITE
+      createCampaignTool,   // WRITE
+      listCampaignsTool,    // READ
+      updateCampaignTool,   // WRITE
+      createTaskTool,       // WRITE
+      updateTaskTool,       // WRITE
+      searchMemoryTool,     // READ
+      storeInsightTool,     // WRITE
+      // Future: delegateToAgentTool (APPROVAL_REQUIRED)
+    ]
+  }
+}
+```
+
+### 5.4 Future Agent Implementations (Same Engine)
+
+| Agent | Type | Key Tools (future) |
+|-------|------|-------------------|
+| Strategy Agent | `STRATEGY` | market_analysis, competitor_research, swot_analysis |
+| Research Agent | `RESEARCH` | web_search, trend_analysis, data_scrape |
+| Content Agent | `CONTENT` | write_copy, create_brief, review_content |
+| Social Media Agent | `SOCIAL` | schedule_post, analyze_engagement, generate_caption |
+| Performance Agent | `PERFORMANCE` | create_ad_campaign, adjust_budget, pause_ad |
+| Analytics Agent | `ANALYTICS` | pull_report, detect_anomaly, attribute_conversion |
+| Creative Agent | `CREATIVE` | generate_flyer, select_template, export_asset |
+
+All seven use the same `AgentEngine.run()` loop, the same memory system, the same approval engine, and the same observability layer.
+
+---
+
+## 6. Memory System
+
+Five distinct memory tiers, all backed by PostgreSQL. Tiers 3–5 use pgvector for semantic retrieval.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        BROWSER / CLIENT                          │
-│   Next.js 15 App  ·  Chat UI  ·  Dashboard  ·  Approval Inbox  │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ HTTPS / REST + SSE
-┌───────────────────────────────▼─────────────────────────────────┐
-│                         NestJS API (Port 3001)                   │
+│                        MEMORY SYSTEM                             │
 │                                                                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────┐ ┌───────────────┐  │
-│  │   Auth   │ │Companies │ │ Conversations│ │   Campaigns   │  │
-│  └──────────┘ └──────────┘ └──────┬───────┘ └───────────────┘  │
-│                                   │                              │
-│                        ┌──────────▼───────────┐                 │
-│                        │  Agent Orchestrator  │                 │
-│                        │  (Director Agent)    │                 │
-│                        └──────────┬───────────┘                 │
-│                                   │ tool_use                     │
-│                        ┌──────────▼───────────┐                 │
-│                        │   Claude API         │                 │
-│                        │   (claude-sonnet-5)  │                 │
-│                        └──────────────────────┘                 │
-└──────────────────────────────────┬──────────────────────────────┘
-                                   │
-           ┌───────────────────────┼───────────────────┐
-           │                       │                   │
-  ┌────────▼────────┐   ┌─────────▼──────┐   ┌───────▼──────┐
-  │  PostgreSQL 16  │   │   Redis 7      │   │   BullMQ     │
-  │  + pgvector     │   │   (cache/      │   │   Workers    │
-  │  (Prisma ORM)   │   │    sessions)   │   │   (jobs)     │
-  └─────────────────┘   └────────────────┘   └──────────────┘
+│  Tier 1: SHORT-TERM (Conversation)                               │
+│  ─ Last 30 messages of the current conversation                  │
+│  ─ Stored in: messages table                                     │
+│  ─ Retrieved: always, full load, ordered by time                 │
+│                                                                  │
+│  Tier 2: LONG-TERM COMPANY (Structured)                         │
+│  ─ Company profile, brand guidelines, product catalog            │
+│  ─ Stored in: company_knowledge table (JSON + text)              │
+│  ─ Retrieved: always, structured query (not vector)              │
+│                                                                  │
+│  Tier 3: CAMPAIGN INSIGHTS (Semantic)                           │
+│  ─ Learnings from past campaigns (what worked, what didn't)      │
+│  ─ Stored in: agent_memory (type=CAMPAIGN_INSIGHT) + embedding   │
+│  ─ Retrieved: top-k by cosine similarity to current query        │
+│                                                                  │
+│  Tier 4: LEARNED PREFERENCES (Semantic)                         │
+│  ─ User/company preferences expressed across conversations       │
+│  ─ Stored in: agent_memory (type=LEARNED_PREFERENCE) + embedding │
+│  ─ Retrieved: top-k by cosine similarity                         │
+│                                                                  │
+│  Tier 5: SEMANTIC MEMORY (Cross-type Index)                     │
+│  ─ Decisions, goals created, key strategic choices              │
+│  ─ Stored in: agent_memory (type=DECISION|GOAL_UPDATE|LESSON)   │
+│  ─ Retrieved: top-k by cosine similarity, filtered by type       │
+│                                                                  │
+│  pgvector HNSW index covers Tiers 3, 4, 5                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Context injected into each agent turn:
+```
+Tier 1: conversation_history (last 30 msgs, always)
+Tier 2: company_context (always, structured)
+Tier 3+4+5: top 5 semantic memories (retrieved by relevance to user's message)
 ```
 
 ---
 
-## 3. Tech Stack
+## 7. Approval Engine
 
-### 3.1 Decisions and Rationale
+Every tool action carries a `PermissionLevel`. The Approval Engine enforces this before any tool executes.
 
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| **Frontend** | Next.js 15 + React 19 | App Router + Server Components for fast dashboard; existing next.config.js reusable |
-| **UI System** | shadcn/ui + existing tailwind.config.ts | Token system already configured; saves setup; consistent radix primitives |
-| **API** | NestJS 11 + TypeScript strict | Modular, decorator-driven; aligns with multi-agent service decomposition |
-| **ORM** | Prisma 6 | Type-safe DB access; migration tracking; generator for query types |
-| **Database** | PostgreSQL 16 + pgvector | Single engine covers relational data + semantic vector search; no separate vector DB |
-| **Auth** | Custom JWT (NestJS Passport) | No external auth dependency; full control; works immediately with local Docker PG |
-| **AI** | Anthropic SDK (`@anthropic-ai/sdk`) + Claude claude-sonnet-5 | Native tool_use; extended thinking; 200K context for company knowledge |
-| **Queue** | BullMQ + Redis | Built on Redis (already present); excellent retry/delay/cron; replaces bare RabbitMQ |
-| **Cache** | Redis 7 | Session store + response cache + BullMQ backing |
-| **Streaming** | SSE (Server-Sent Events) | Real-time agent response streaming; no WebSocket complexity for first slice |
+### 7.1 Permission Levels
 
-### 3.2 What is Dropped from Old Stack
+| Level | Description | Behavior |
+|-------|-------------|----------|
+| `READ` | Safe data retrieval | Executes immediately, no human gate |
+| `WRITE` | Creates or modifies data | Executes immediately; logged to audit |
+| `APPROVAL_REQUIRED` | Affects external systems or significant spend | Agent pauses, human is notified, execution waits |
+| `ADMIN_ONLY` | Billing, user management, company deletion | Blocked for agents; admin API only |
 
-| Removed | Reason |
-|---------|--------|
-| RabbitMQ | BullMQ on Redis covers all queue needs; one less service |
-| Elasticsearch | pgvector handles semantic search; PostgreSQL FTS handles text search |
-| PgAdmin | Prisma Studio serves the same dev need without a running container |
+### 7.2 Approval Flow
+
+```
+Agent wants to call tool with APPROVAL_REQUIRED:
+  1. Engine calls ApprovalEngine.requestApproval(tool, input, context)
+  2. ApprovalEngine creates ApprovalRequest record (status: PENDING)
+  3. Event emitted: ApprovalRequested → SSE pushes to frontend
+  4. Agent returns: "I've prepared a [action]. Your approval is required. [description]"
+  5. Human sees Approval Inbox notification
+  6. Human approves → ApprovalGranted event
+  7. BullMQ job resumes the agent turn, executes the tool, continues loop
+  8. Human denies → AgentDenied event, agent receives denial reason, responds accordingly
+```
+
+### 7.3 First Slice Tool Permission Map
+
+| Tool | Permission |
+|------|-----------|
+| `list_goals` | READ |
+| `list_campaigns` | READ |
+| `search_memory` | READ |
+| `create_goal` | WRITE |
+| `create_campaign` | WRITE |
+| `update_campaign` | WRITE |
+| `create_task` | WRITE |
+| `update_task` | WRITE |
+| `store_insight` | WRITE |
+| *(future)* `schedule_social_post` | APPROVAL_REQUIRED |
+| *(future)* `create_ad_campaign` | APPROVAL_REQUIRED |
+| *(future)* `adjust_ad_budget` | APPROVAL_REQUIRED |
+| *(future)* `send_email_campaign` | APPROVAL_REQUIRED |
+| *(future)* `delete_campaign` | ADMIN_ONLY |
 
 ---
 
-## 4. Repository Structure
+## 8. Agent Orchestration Layer
+
+Designed for future agent-to-agent delegation. The Director can request that another agent handle a task — this goes through the Orchestrator, which queues it in BullMQ. In the first slice, no other agents exist, so delegated tasks are queued as PENDING_AGENT_AVAILABILITY.
+
+### 8.1 Orchestration Protocol
+
+```typescript
+interface AgentTask {
+  taskId: string          // UUID
+  parentAgentType: AgentType
+  targetAgentType: AgentType
+  companyId: string
+  campaignId?: string
+  input: Record<string, unknown>
+  priority: 1 | 2 | 3 | 4 | 5
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING_AGENT'
+  delegatedAt: Date
+  completedAt?: Date
+  result?: unknown
+}
+
+class AgentOrchestrator {
+  async delegate(task: Omit<AgentTask, 'taskId' | 'status'>): Promise<string>
+  async getStatus(taskId: string): Promise<AgentTask>
+  async cancel(taskId: string): Promise<void>
+  async listPending(companyId: string): Promise<AgentTask[]>
+}
+```
+
+### 8.2 Delegation Example (Director → Content Agent, future)
 
 ```
-ai-marketing-os/             ← rename from flyer-ai-enterprise
-├── backend/                 ← NestJS API
+User: "Create a LinkedIn content plan for the Q1 campaign"
+Director agent decides: this requires Content Agent
+Director calls: delegate_to_agent({
+  targetAgentType: 'CONTENT',
+  campaignId: 'abc',
+  input: { request: 'LinkedIn content calendar, Q1, 12 posts...' }
+})
+Orchestrator: creates AgentTask in DB, queues to BullMQ
+Response to user: "I've queued this for the Content Agent. It will create the LinkedIn content plan and notify you when done."
+```
+
+---
+
+## 9. Event System
+
+All significant events are published to BullMQ. Consumers: audit logger, observability service, notification service, webhook gateway (future), scheduler.
+
+### 9.1 Event Types
+
+```typescript
+// Agent lifecycle
+AgentTurnStarted  { traceId, agentType, conversationId, companyId }
+AgentTurnCompleted { traceId, durationMs, inputTokens, outputTokens, costUsd }
+AgentTurnFailed   { traceId, error, durationMs }
+
+// Tool execution
+ToolCallStarted   { traceId, toolName, permissionLevel, input }
+ToolCallCompleted { traceId, toolName, durationMs, result }
+ToolCallFailed    { traceId, toolName, error }
+
+// Approval workflow
+ApprovalRequested { requestId, agentType, toolName, companyId, userId }
+ApprovalGranted   { requestId, grantedBy, grantedAt }
+ApprovalDenied    { requestId, deniedBy, reason }
+
+// Business events
+GoalCreated       { goalId, companyId, agentType, conversationId }
+CampaignCreated   { campaignId, companyId, agentType }
+TaskCreated       { taskId, campaignId, assigneeType }
+CampaignUpdated   { campaignId, fields, agentType }
+
+// Scheduled triggers
+ScheduledJobFired { jobType, companyId, scheduledAt }
+DailyReportDue    { companyId }
+```
+
+### 9.2 Scheduled Jobs (Cloud-ready)
+
+BullMQ repeatable jobs handle time-based triggers. Designed now, even though the triggered agents may not exist yet.
+
+```typescript
+// Example: daily 08:00 digest per company
+await queue.add(
+  'daily-marketing-report',
+  { companyId, reportType: 'daily_summary' },
+  { repeat: { cron: '0 8 * * *', tz: company.timezone } }
+)
+
+// Future scheduled jobs
+'weekly-campaign-review'    → triggers Director Agent review of all active campaigns
+'campaign-health-check'     → checks KPI progress, alerts if off-track
+'competitor-watch'          → triggers Research Agent (future)
+```
+
+---
+
+## 10. Observability
+
+Built in from day one. Every agent execution is traced end-to-end.
+
+### 10.1 What is Traced
+
+```
+Per agent turn:
+  - traceId (UUID, links all records for one turn)
+  - agentType, conversationId, companyId
+  - totalDurationMs
+  - llmCallDurationMs (time waiting for AI provider)
+  - toolExecutionDurationMs (time executing tools)
+  - memoryRetrievalDurationMs
+  - inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens
+  - costUsd (calculated from model pricing config)
+  - toolCallsCount, toolCallsFailed
+  - error (if any)
+
+Per tool call:
+  - traceId (same as parent turn)
+  - toolName, permissionLevel
+  - inputPayload (sanitized — no secrets)
+  - resultSummary (e.g. "created campaign id=abc")
+  - durationMs
+  - error (if any)
+```
+
+### 10.2 Cost Calculation
+
+```typescript
+// Pricing config (updated as models change)
+const PRICING: Record<string, ModelPricing> = {
+  'claude-sonnet-5-20251001': {
+    inputPerMillion: 3.00,       // $3 per 1M input tokens
+    outputPerMillion: 15.00,     // $15 per 1M output tokens
+    cacheWritePerMillion: 3.75,
+    cacheReadPerMillion: 0.30,
+  },
+}
+
+function calculateCost(usage: TokenUsage, model: string): number {
+  const pricing = PRICING[model]
+  return (
+    (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
+    (usage.outputTokens / 1_000_000) * pricing.outputPerMillion
+  )
+}
+```
+
+### 10.3 Observability Outputs
+
+| Output | Destination | Purpose |
+|--------|-------------|---------|
+| Structured logs | stdout (JSON) | Collected by cloud log aggregator |
+| Execution records | `agent_executions` table | Per-company cost dashboards |
+| Tool call records | `tool_call_logs` table | Audit + debugging |
+| Error events | BullMQ dead-letter queue | Alerting |
+| Health endpoint | `GET /health` | Load balancer + uptime monitoring |
+
+---
+
+## 11. Tech Stack Decisions
+
+| Layer | Choice | Decision |
+|-------|--------|----------|
+| **Frontend** | Next.js 15 + React 19 + TypeScript | App Router, Server Components, streaming |
+| **UI Components** | shadcn/ui + existing tailwind.config.ts | Token system already configured |
+| **API** | NestJS 11 + TypeScript strict | Module system maps cleanly to agent/service decomposition |
+| **ORM** | Prisma 6 | Type-safe; migrations; preview: postgresqlExtensions |
+| **Database** | PostgreSQL 16 + pgvector | Single engine: relational + vector search |
+| **Auth** | Custom JWT + bcrypt | No external dependency; full control; works with local Docker |
+| **AI (Day 1)** | Anthropic SDK → claude-sonnet-5 | Via AIProvider interface |
+| **Embeddings (Day 1)** | Voyage AI voyage-3-lite | Via EmbeddingProvider interface |
+| **Queue** | BullMQ on Redis | Scheduled jobs, async memory writes, approval workflow |
+| **Cache/Sessions** | Redis 7 | Token blocklist, response cache, BullMQ backend |
+| **Streaming** | SSE (Server-Sent Events) | Real-time agent output; simpler than WebSocket for first slice |
+| **Observability** | Structured JSON logs + `agent_executions` DB table | No external service needed for first slice |
+| **Dropped** | RabbitMQ, Elasticsearch, PgAdmin | BullMQ covers queues; pgvector + FTS covers search; Prisma Studio covers DB UI |
+
+---
+
+## 12. Repository Structure
+
+```
+ai-marketing-os/
+├── backend/
 │   ├── src/
 │   │   ├── main.ts
 │   │   ├── app.module.ts
-│   │   ├── auth/            ← JWT auth, guards, strategies
-│   │   │   ├── auth.module.ts
-│   │   │   ├── auth.controller.ts
-│   │   │   ├── auth.service.ts
-│   │   │   ├── strategies/
-│   │   │   │   ├── jwt.strategy.ts
-│   │   │   │   └── local.strategy.ts
-│   │   │   ├── guards/
-│   │   │   │   ├── jwt-auth.guard.ts
-│   │   │   │   └── roles.guard.ts
-│   │   │   └── dto/
-│   │   │       ├── register.dto.ts
-│   │   │       └── login.dto.ts
-│   │   ├── companies/       ← company/tenant management
-│   │   │   ├── companies.module.ts
-│   │   │   ├── companies.controller.ts
-│   │   │   ├── companies.service.ts
-│   │   │   └── dto/
-│   │   ├── users/           ← user profile, within a company
-│   │   │   ├── users.module.ts
-│   │   │   ├── users.service.ts
-│   │   │   └── dto/
-│   │   ├── conversations/   ← persistent agent conversations
-│   │   │   ├── conversations.module.ts
-│   │   │   ├── conversations.controller.ts
-│   │   │   ├── conversations.service.ts
-│   │   │   └── dto/
-│   │   ├── agents/          ← agent orchestration layer
+│   │   │
+│   │   ├── auth/                    ← JWT, bcrypt, refresh tokens
+│   │   ├── companies/               ← company/tenant management
+│   │   ├── users/                   ← user profiles
+│   │   ├── goals/                   ← MarketingGoal CRUD
+│   │   ├── campaigns/               ← Campaign CRUD
+│   │   ├── tasks/                   ← Task CRUD
+│   │   ├── conversations/           ← Conversation + Message + SSE stream
+│   │   │
+│   │   ├── agent-engine/            ← THE REUSABLE ENGINE
+│   │   │   ├── agent-engine.module.ts
+│   │   │   ├── base/
+│   │   │   │   ├── agent-engine.abstract.ts
+│   │   │   │   ├── agent-context.types.ts
+│   │   │   │   ├── agent-tool.types.ts
+│   │   │   │   └── agent-config.types.ts
+│   │   │   ├── providers/
+│   │   │   │   ├── ai-provider.interface.ts
+│   │   │   │   ├── embedding-provider.interface.ts
+│   │   │   │   ├── anthropic.provider.ts
+│   │   │   │   └── voyage.embedding.provider.ts
+│   │   │   ├── memory/
+│   │   │   │   ├── memory-system.service.ts
+│   │   │   │   ├── short-term.memory.ts
+│   │   │   │   ├── long-term.memory.ts
+│   │   │   │   ├── semantic.memory.ts
+│   │   │   │   └── memory.types.ts
+│   │   │   ├── approval/
+│   │   │   │   ├── approval-engine.service.ts
+│   │   │   │   ├── approval.types.ts
+│   │   │   │   └── permission-level.enum.ts
+│   │   │   ├── orchestration/
+│   │   │   │   ├── agent-orchestrator.service.ts
+│   │   │   │   └── agent-task.types.ts
+│   │   │   └── observability/
+│   │   │       ├── observability-tracer.service.ts
+│   │   │       ├── cost-calculator.ts
+│   │   │       └── execution-log.types.ts
+│   │   │
+│   │   ├── agents/                  ← CONCRETE AGENT IMPLEMENTATIONS
 │   │   │   ├── agents.module.ts
-│   │   │   ├── base-agent.service.ts       ← abstract base
-│   │   │   ├── director/
-│   │   │   │   ├── director-agent.service.ts
-│   │   │   │   ├── director-agent.tools.ts ← tool definitions
-│   │   │   │   └── director-agent.prompt.ts
-│   │   │   └── memory/
-│   │   │       ├── memory.service.ts       ← pgvector read/write
-│   │   │       └── memory.types.ts
-│   │   ├── goals/           ← marketing goals
-│   │   │   ├── goals.module.ts
-│   │   │   ├── goals.controller.ts
-│   │   │   ├── goals.service.ts
-│   │   │   └── dto/
-│   │   ├── campaigns/       ← campaigns + tasks
-│   │   │   ├── campaigns.module.ts
-│   │   │   ├── campaigns.controller.ts
-│   │   │   ├── campaigns.service.ts
-│   │   │   └── dto/
-│   │   ├── tasks/
-│   │   │   ├── tasks.module.ts
-│   │   │   ├── tasks.controller.ts
-│   │   │   ├── tasks.service.ts
-│   │   │   └── dto/
-│   │   ├── database/        ← Prisma setup
+│   │   │   └── director/
+│   │   │       ├── director-agent.service.ts    ← extends AgentEngine
+│   │   │       ├── director-agent.prompt.ts
+│   │   │       └── director-agent.tools.ts      ← tool definitions + implementations
+│   │   │
+│   │   ├── approval/                ← Approval HTTP API (inbox, grant, deny)
+│   │   ├── observability/           ← Observability HTTP API + scheduled reporters
+│   │   ├── scheduler/               ← BullMQ job definitions + cron setup
+│   │   │
+│   │   ├── database/
 │   │   │   ├── database.module.ts
 │   │   │   └── prisma.service.ts
-│   │   └── common/          ← shared guards, pipes, interceptors, decorators
+│   │   └── common/
 │   │       ├── decorators/
-│   │       │   └── current-user.decorator.ts
 │   │       ├── filters/
-│   │       │   └── all-exceptions.filter.ts
+│   │       ├── guards/
 │   │       ├── interceptors/
-│   │       │   └── transform.interceptor.ts
 │   │       └── pipes/
-│   │           └── validation.pipe.ts
+│   │
 │   ├── prisma/
 │   │   ├── schema.prisma
 │   │   ├── migrations/
 │   │   └── seed.ts
 │   ├── test/
-│   │   └── auth.e2e-spec.ts
 │   ├── package.json
-│   ├── tsconfig.json
-│   └── .env.example
+│   └── tsconfig.json
 │
-├── frontend/                ← Next.js App
+├── frontend/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── (auth)/
 │   │   │   │   ├── login/page.tsx
 │   │   │   │   └── register/page.tsx
 │   │   │   └── (dashboard)/
-│   │   │       ├── layout.tsx          ← sidebar + topbar
-│   │   │       ├── page.tsx            ← overview: goals, active campaigns
-│   │   │       ├── chat/
-│   │   │       │   └── page.tsx        ← Marketing Director Agent chat
-│   │   │       ├── goals/
-│   │   │       │   └── page.tsx
-│   │   │       └── campaigns/
-│   │   │           ├── page.tsx
-│   │   │           └── [id]/page.tsx
+│   │   │       ├── layout.tsx
+│   │   │       ├── page.tsx              ← overview
+│   │   │       ├── chat/[id]/page.tsx    ← agent chat
+│   │   │       ├── goals/page.tsx
+│   │   │       ├── campaigns/page.tsx
+│   │   │       ├── campaigns/[id]/page.tsx
+│   │   │       └── approvals/page.tsx    ← approval inbox
 │   │   ├── components/
-│   │   │   ├── ui/              ← shadcn/ui components
+│   │   │   ├── ui/                       ← shadcn/ui
 │   │   │   ├── chat/
 │   │   │   │   ├── message-list.tsx
 │   │   │   │   ├── message-input.tsx
-│   │   │   │   └── tool-call-display.tsx
-│   │   │   ├── campaigns/
+│   │   │   │   ├── tool-call-display.tsx
+│   │   │   │   └── approval-prompt.tsx   ← inline approval in chat
+│   │   │   ├── approvals/
+│   │   │   │   └── approval-card.tsx
 │   │   │   └── layout/
-│   │   │       ├── sidebar.tsx
-│   │   │       └── topbar.tsx
 │   │   ├── lib/
-│   │   │   ├── api-client.ts    ← typed fetch wrapper
-│   │   │   └── auth.ts          ← token management
 │   │   ├── hooks/
-│   │   │   ├── use-auth.ts
-│   │   │   └── use-conversation.ts
-│   │   ├── store/
-│   │   │   └── auth.store.ts    ← Zustand
-│   │   └── types/
-│   │       └── index.ts
-│   ├── public/
-│   ├── package.json
-│   ├── next.config.js           ← reuse existing
-│   ├── tailwind.config.ts       ← reuse existing
-│   └── tsconfig.json
+│   │   └── store/
+│   └── package.json
 │
-├── docker-compose.yml           ← updated (remove backend build, remove ES/Rabbit)
-├── docker-compose.dev.yml       ← dev overrides with hot reload
-├── .env.example                 ← updated for new stack
-├── .gitignore                   ← ensure .env is listed
-├── ARCHITECTURE.md              ← this file
-├── DATABASE_DESIGN.md
-├── AGENT_DESIGN.md
-└── IMPLEMENTATION_PLAN.md
+├── docker-compose.yml           ← postgres (pgvector), redis only
+├── package.json                 ← workspace root
+├── .env.example
+└── *.md                         ← design docs
 ```
 
 ---
 
-## 5. Authentication Flow
+## 13. Security Baseline
 
-Custom JWT, no external auth service dependency.
-
-```
-Register:
-  POST /auth/register { email, password, firstName, lastName, companyName }
-  → creates Company + User (OWNER role)
-  → returns { accessToken, refreshToken, user, company }
-
-Login:
-  POST /auth/login { email, password }
-  → validates bcrypt hash
-  → returns { accessToken (15m), refreshToken (7d), user, company }
-
-Refresh:
-  POST /auth/refresh { refreshToken }
-  → validates refresh token from DB (stored hashed)
-  → issues new access + refresh token pair (rotation)
-  → old refresh token invalidated
-
-Every authenticated request:
-  Authorization: Bearer <accessToken>
-  → JwtAuthGuard validates signature + expiry
-  → CurrentUser decorator injects { userId, companyId, role }
-```
-
-**Multi-tenancy**: Every database query is scoped by `companyId` extracted from the JWT payload. There is no cross-tenant data access.
+| Concern | Implementation |
+|---------|----------------|
+| Passwords | bcrypt, cost factor 12 |
+| JWT secrets | Minimum 64 random bytes, env-only, never committed |
+| Refresh tokens | Stored as SHA-256 hash, rotated on every use |
+| Rate limiting | 100 req/15min global; 10/min on `/auth/*` |
+| Input validation | `class-validator` on all DTOs; `whitelist: true, forbidNonWhitelisted: true` |
+| SQL injection | Prisma parameterized queries only |
+| Company isolation | `companyId` from JWT on every query — no exceptions |
+| CORS | Allowlist from `FRONTEND_URL` env var |
+| Agent permission gate | ApprovalEngine enforced before any APPROVAL_REQUIRED tool |
+| Sensitive data | `passwordHash`, token hashes never returned in any API response |
+| Audit trail | Every mutation and agent action written to `audit_logs` (append-only) |
 
 ---
 
-## 6. Agent Communication Pattern
+## 14. Environment Variables
 
-The Marketing Director Agent runs within an HTTP request/response cycle for synchronous responses, with SSE streaming for real-time output.
-
-```
-POST /conversations/:id/messages
-  Body: { content: string }
-
-1. Save user message to DB (role: USER)
-2. Load conversation history (last N messages)
-3. Retrieve relevant memories (pgvector similarity search)
-4. Load company context (goals, active campaigns, company profile)
-5. Call Claude claude-sonnet-5 with:
-   - system prompt (director persona + company context + memories)
-   - messages (conversation history + new user message)
-   - tools (create_campaign, create_task, list_goals, etc.)
-6. Handle tool calls:
-   a. Execute tool (real DB operation)
-   b. Append tool_result to message array
-   c. Continue Claude call until no more tool calls
-7. Save assistant message to DB (role: ASSISTANT)
-8. Save notable decisions to memory (async, via BullMQ job)
-9. Return final response
-
-Response format: { message, toolCallsExecuted: [], tokensUsed: {} }
-Streaming: SSE endpoint /conversations/:id/stream for real-time display
-```
-
----
-
-## 7. Memory Architecture
-
-Agent memory uses pgvector for semantic retrieval. Two memory types:
-
-**Working Memory** (conversation context, loaded every turn):
-- Last 20 messages of current conversation
-- Company goals and active campaigns (structured query, not vector)
-
-**Long-term Memory** (semantic search):
-- Key decisions made by the agent
-- Campaign outcomes and lessons
-- Company preferences expressed in conversation
-- Stored with embedding, retrieved by cosine similarity
-
-```
-Memory retrieval on each agent turn:
-  query_embedding = embed(user_message)
-  relevant_memories = SELECT * FROM agent_memory
-    WHERE company_id = $1
-    ORDER BY embedding <=> query_embedding
-    LIMIT 5
-    WHERE similarity > 0.75
-```
-
----
-
-## 8. API Design Principles
-
-- Base path: `/api/v1`
-- All responses: `{ data: T, meta?: { pagination } }`
-- All errors: `{ error: { code, message, details? }, timestamp, path }`
-- HTTP status codes used correctly (201 for creates, 204 for deletes)
-- Pagination: `?page=1&limit=20` on all list endpoints
-- Soft deletes: `deletedAt` timestamp, never physical deletes
-- Audit trail: every mutation appends to `audit_logs` table
-
----
-
-## 9. Environment Variables
-
-```
+```bash
 # App
 NODE_ENV=development
 PORT=3001
@@ -327,31 +744,22 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_marketing_os
 REDIS_URL=redis://localhost:6379
 
 # JWT
-JWT_SECRET=<min 64 chars, randomly generated>
+JWT_SECRET=                       # min 64 random bytes
 JWT_EXPIRATION=15m
-REFRESH_TOKEN_SECRET=<min 64 chars, different from JWT_SECRET>
+REFRESH_TOKEN_SECRET=             # min 64 random bytes, different from JWT_SECRET
 REFRESH_TOKEN_EXPIRATION=7d
 
-# Anthropic
-ANTHROPIC_API_KEY=<your key>
+# AI Providers
+ANTHROPIC_API_KEY=
 CLAUDE_MODEL=claude-sonnet-5-20251001
+DEFAULT_AI_PROVIDER=anthropic
 
-# Frontend URL (for CORS)
+# Embeddings
+VOYAGE_API_KEY=
+EMBEDDING_MODEL=voyage-3-lite
+EMBEDDING_DIMENSIONS=1024
+
+# Frontend
 FRONTEND_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
-
----
-
-## 10. Security Baseline
-
-| Concern | Implementation |
-|---------|----------------|
-| Password storage | bcrypt, cost factor 12 |
-| JWT secrets | Min 64 random bytes, never committed |
-| Refresh token | Stored hashed (SHA-256), rotated on use |
-| Rate limiting | `@nestjs/throttler`: 100 req/15min globally, 10/min on auth endpoints |
-| Input validation | `class-validator` on all DTOs, `ValidationPipe(transform: true, whitelist: true)` |
-| SQL injection | Prisma parameterized queries only, no raw SQL except pgvector similarity |
-| CORS | Explicit allowlist of `FRONTEND_URL` |
-| Company isolation | `companyId` on every query extracted from verified JWT |
-| .env | In .gitignore; `.env.example` is the only committed env file |
