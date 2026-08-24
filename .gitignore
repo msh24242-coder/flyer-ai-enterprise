@@ -65,6 +65,7 @@ Thumbs.db
 .turbo/
 .eslintcache
 .stylelintcache
+*.tsbuildinfo
 
 # ─── Temporary ───────────────────────────────────────────────────────────────
 tmp/
