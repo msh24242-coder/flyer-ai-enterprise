@@ -1,0 +1,389 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), vector]
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MemoryType {
+  DECISION
+  CAMPAIGN_INSIGHT
+  LEARNED_PREFERENCE
+  GOAL_UPDATE
+  LESSON
+}
+
+enum PermissionLevel {
+  READ
+  WRITE
+  APPROVAL_REQUIRED
+  ADMIN_ONLY
+}
+
+enum ApprovalStatus {
+  PENDING
+  GRANTED
+  DENIED
+  EXPIRED
+}
+
+enum AgentType {
+  DIRECTOR
+  STRATEGY
+  RESEARCH
+  CONTENT
+  SOCIAL
+  PERFORMANCE
+  ANALYTICS
+  CREATIVE
+}
+
+enum AgentTaskStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  PENDING_AGENT
+  CANCELLED
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Company {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  industry  String?
+  website   String?
+  logoUrl   String?
+  aiConfig  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  conversations    Conversation[]
+  goals            MarketingGoal[]
+  campaigns        Campaign[]
+  tasks            Task[]
+  companyKnowledge CompanyKnowledge[]
+  agentMemory      AgentMemory[]
+  agentTasks       AgentTask[]
+  auditLogs        AuditLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email               String    @unique
+  passwordHash        String
+  firstName           String
+  lastName            String
+  role                UserRole  @default(MEMBER)
+  companyId           String    @db.Uuid
+  refreshTokenHash    String?
+  lastLoginAt         DateTime?
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  assignedTasks Task[]         @relation("AssignedTasks")
+  auditLogs     AuditLog[]
+  approvals     ApprovalRequest[]
+
+  @@index([companyId])
+  @@index([email])
+  @@map("users")
+}
+
+model Conversation {
+  id           String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId    String             @db.Uuid
+  userId       String             @db.Uuid
+  agentType    AgentType          @default(DIRECTOR)
+  title        String?
+  status       ConversationStatus @default(ACTIVE)
+  totalCostUsd Float              @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id])
+  messages        Message[]
+  agentExecutions AgentExecution[]
+  approvalRequests ApprovalRequest[]
+
+  @@index([companyId, status])
+  @@index([userId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String   @db.Uuid
+  role           String   // "user" | "assistant" | "tool"
+  content        Json
+  tokenCount     Int?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model MarketingGoal {
+  id          String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId   String     @db.Uuid
+  title       String
+  description String?
+  status      GoalStatus @default(DRAFT)
+  targetDate  DateTime?
+  metrics     Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+
+  @@index([companyId, status])
+  @@map("marketing_goals")
+}
+
+model Campaign {
+  id          String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId   String         @db.Uuid
+  goalId      String?        @db.Uuid
+  title       String
+  description String?
+  status      CampaignStatus @default(DRAFT)
+  startDate   DateTime?
+  endDate     DateTime?
+  budget      Float?
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  goal    MarketingGoal? @relation(fields: [goalId], references: [id])
+  tasks   Task[]
+
+  @@index([companyId, status])
+  @@index([goalId])
+  @@map("campaigns")
+}
+
+model Task {
+  id           String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId    String       @db.Uuid
+  campaignId   String?      @db.Uuid
+  assignedToId String?      @db.Uuid
+  title        String
+  description  String?
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+  dueDate      DateTime?
+  metadata     Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  assignedTo User?     @relation("AssignedTasks", fields: [assignedToId], references: [id])
+
+  @@index([companyId, status])
+  @@index([campaignId])
+  @@index([assignedToId])
+  @@map("tasks")
+}
+
+model CompanyKnowledge {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId   String   @db.Uuid
+  category    String
+  key         String
+  value       Json
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, category, key])
+  @@index([companyId, category])
+  @@map("company_knowledge")
+}
+
+model AgentMemory {
+  id          String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId   String     @db.Uuid
+  agentType   AgentType
+  memoryType  MemoryType
+  content     String
+  embedding   Unsupported("vector(1024)")?
+  importance  Float      @default(0.5)
+  accessCount Int        @default(0)
+  lastAccessedAt DateTime?
+  expiresAt   DateTime?
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, agentType, memoryType])
+  @@map("agent_memory")
+}
+
+model AgentExecution {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  traceId         String    @unique
+  conversationId  String    @db.Uuid
+  agentType       AgentType
+  model           String
+  inputTokens     Int       @default(0)
+  outputTokens    Int       @default(0)
+  totalTokens     Int       @default(0)
+  costUsd         Float     @default(0)
+  latencyMs       Int?
+  iterations      Int       @default(1)
+  success         Boolean   @default(true)
+  errorMessage    String?
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id])
+  toolCallLogs ToolCallLog[]
+
+  @@index([conversationId])
+  @@index([traceId])
+  @@map("agent_executions")
+}
+
+model ToolCallLog {
+  id               String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  agentExecutionId String          @db.Uuid
+  toolName         String
+  permissionLevel  PermissionLevel
+  inputSnapshot    Json
+  outputSnapshot   Json?
+  latencyMs        Int?
+  success          Boolean         @default(true)
+  errorMessage     String?
+  createdAt        DateTime        @default(now())
+
+  agentExecution AgentExecution @relation(fields: [agentExecutionId], references: [id])
+
+  @@index([agentExecutionId])
+  @@map("tool_call_logs")
+}
+
+model ApprovalRequest {
+  id             String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String         @db.Uuid
+  requestedById  String         @db.Uuid
+  toolName       String
+  toolInput      Json
+  status         ApprovalStatus @default(PENDING)
+  reviewedById   String?        @db.Uuid
+  reviewNote     String?
+  expiresAt      DateTime
+  resolvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  requestedBy  User         @relation(fields: [requestedById], references: [id])
+
+  @@index([conversationId, status])
+  @@map("approval_requests")
+}
+
+model AgentTask {
+  id             String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId      String          @db.Uuid
+  parentAgentType AgentType
+  childAgentType  AgentType
+  status         AgentTaskStatus @default(QUEUED)
+  instruction    String
+  result         Json?
+  errorMessage   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+  @@map("agent_tasks")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId  String   @db.Uuid
+  userId     String?  @db.Uuid
+  traceId    String?
+  action     String
+  resource   String
+  resourceId String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@index([traceId])
+  @@map("audit_logs")
+}

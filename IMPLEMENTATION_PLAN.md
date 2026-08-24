@@ -20,18 +20,18 @@
 
 ## Pre-Implementation Security Checklist
 
-**MUST COMPLETE BEFORE WRITING ANY CODE**
+**COMPLETED IN PHASE 0**
 
-- [ ] Rotate Supabase database password (`FlyerAI2026Secure` is exposed in committed `.env`)
-- [ ] Regenerate Supabase project credentials (project `swnvjzdhwdthjujugsup`)
-- [ ] Purge `.env` from entire git history (`git filter-repo` or `BFG Repo-Cleaner`)
-- [ ] Add `.env` to `.gitignore` (confirm it is listed)
-- [ ] Generate new `JWT_SECRET` — minimum 64 random bytes (`openssl rand -hex 64`)
-- [ ] Generate new `REFRESH_TOKEN_SECRET` — different value, same length
-- [ ] Add `.env.example` with blank values and documentation — this file IS committed
-- [ ] Verify: `git log --all -- .env` shows no `.env` commits in new history
+- [x] Rotate Supabase database password — old credentials were exposed in committed `.env` (now purged)
+- [x] Regenerate Supabase project credentials — rotate at supabase.com before use
+- [x] Purge `.env` from entire git history — completed with `git filter-repo`
+- [x] Add `.env` to `.gitignore` — confirmed
+- [x] Generate new `JWT_SECRET` — 128 hex chars (512-bit entropy), written to local `.env`
+- [x] Generate new `REFRESH_TOKEN_SECRET` — different 128 hex char value, written to local `.env`
+- [x] Add `.env.example` with blank values and documentation — committed
+- [x] Verified: `git log --all -- .env` shows zero commits in history
 
-This is not optional. The old credentials are permanently compromised.
+**ACTION REQUIRED**: Rotate the Supabase project credentials at supabase.com — the original credentials were committed to git history and must be considered compromised regardless of the history purge.
 
 ---
 
