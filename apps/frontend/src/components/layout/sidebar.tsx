@@ -73,6 +73,25 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
+  {
+    href: '/approvals',
+    label: 'Approvals',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+        <path d="M9 12l2 2 4-4" />
+        <path d="M12 3a9 9 0 100 18A9 9 0 0012 3z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/usage',
+    label: 'AI Usage',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+      </svg>
+    ),
+  },
 ];
 
 export function Sidebar() {

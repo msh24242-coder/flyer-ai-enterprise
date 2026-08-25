@@ -24,6 +24,14 @@ export interface AgentExecutionResult {
   pendingApprovalId?: string;
 }
 
+export type AgentStreamEventType =
+  | { type: 'agent_start'; agentType: string }
+  | { type: 'tool_start'; toolName: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; toolName: string; durationMs: number; isError: boolean }
+  | { type: 'token'; delta: string }
+  | { type: 'agent_done'; result: AgentExecutionResult }
+  | { type: 'agent_error'; message: string };
+
 export interface AgentIdentity {
   agentType: AgentType;
   displayName: string;

@@ -9,7 +9,7 @@ import { AgentType } from '@prisma/client';
 import { CompanyRepository } from '../company/company.repository';
 import { ConversationRepository } from './repositories/conversation.repository';
 import { MarketingDirectorAgent } from './marketing-director.agent';
-import { AgentExecutionResult } from '../agent-engine/base/agent-engine.types';
+import { AgentExecutionResult, AgentStreamEventType } from '../agent-engine/base/agent-engine.types';
 import { CONVERSATION_HISTORY_LIMIT } from '../agent-engine/agent-engine.constants';
 import { MemoryService } from '../agent-engine/memory/memory.service';
 
@@ -121,6 +121,62 @@ export class MarketingAgentService {
       conversationId,
       result.traceResult.estimatedCostUsd,
     );
+
+    return {
+      conversationId,
+      response: result.response,
+      traceId: result.traceResult.traceId,
+      agentExecutionId: result.traceResult.agentExecutionId,
+      estimatedCostUsd: result.traceResult.estimatedCostUsd,
+      totalLatencyMs: result.traceResult.totalLatencyMs,
+      iterations: result.traceResult.iterations,
+      pendingApprovalId: result.pendingApprovalId,
+    };
+  }
+
+  async runStream(
+    input: RunAgentInput,
+    onEvent: (event: AgentStreamEventType) => void,
+  ): Promise<RunAgentOutput> {
+    const member = await this.companyRepo.findMemberInCompany(input.companyId, input.userId);
+    if (!member || !member.isActive) throw new ForbiddenException('Access denied to this company');
+
+    let conversationId: string;
+    if (input.conversationId) {
+      const existing = await this.conversationRepo.findById(input.companyId, input.conversationId);
+      if (!existing) throw new NotFoundException('Conversation not found');
+      conversationId = existing.id;
+    } else {
+      const conv = await this.conversationRepo.create(
+        input.companyId, input.userId, AgentType.DIRECTOR, this.extractConversationTitle(input.message),
+      );
+      conversationId = conv.id;
+    }
+
+    const history = await this.conversationRepo.getHistory(conversationId, CONVERSATION_HISTORY_LIMIT);
+    const company = await this.companyRepo.findById(input.companyId);
+    const knowledge = await this.memoryService.getCompanyKnowledge(input.companyId);
+
+    await this.conversationRepo.addMessage(conversationId, 'user', input.message);
+
+    const model = input.model ?? this.config.get<string>('AI_MODEL', 'claude-opus-5');
+    const result = await this.agent.executeStream(
+      {
+        companyId: input.companyId,
+        userId: input.userId,
+        conversationId,
+        conversationHistory: history,
+        userMessage: input.message,
+        model,
+        additionalContext: {
+          company: { id: company?.id ?? input.companyId, name: company?.name ?? 'Unknown Company', industry: company?.industry, website: company?.website, knowledge },
+        },
+      },
+      onEvent,
+    );
+
+    await this.conversationRepo.addMessage(conversationId, 'assistant', result.response, result.traceResult.totalOutputTokens);
+    await this.conversationRepo.incrementCost(conversationId, result.traceResult.estimatedCostUsd);
 
     return {
       conversationId,

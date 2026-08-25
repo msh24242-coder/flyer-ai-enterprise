@@ -10,7 +10,7 @@ import {
   HttpStatus,
   Sse,
 } from '@nestjs/common';
-import { Observable, from, map } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -49,8 +49,8 @@ export class MarketingAgentController {
   /**
    * POST /companies/:companyId/agents/marketing-director/run/stream
    *
-   * SSE endpoint that streams agent events as Server-Sent Events.
-   * Emits: agent_start, agent_response, agent_done (or agent_error).
+   * SSE endpoint that streams real agent events as Server-Sent Events.
+   * Event types: agent_start, tool_start, tool_result, token, agent_done, agent_error.
    */
   @Sse('run/stream')
   @Throttle({ default: { ttl: 60_000, limit: 20 } })
@@ -59,20 +59,29 @@ export class MarketingAgentController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: RunAgentDto,
   ): Observable<MessageEvent> {
-    const runPromise = this.agentService.run({
-      companyId,
-      userId: user.id,
-      conversationId: dto.conversationId,
-      message: dto.message,
-      model: dto.model,
-    });
+    const subject = new Subject<MessageEvent>();
 
-    return from(runPromise).pipe(
-      map((result) => ({
-        type: 'agent_done',
-        data: JSON.stringify(result),
-      } as unknown as MessageEvent)),
-    );
+    this.agentService
+      .runStream(
+        {
+          companyId,
+          userId: user.id,
+          conversationId: dto.conversationId,
+          message: dto.message,
+          model: dto.model,
+        },
+        (event) => {
+          subject.next({ type: event.type, data: JSON.stringify(event) } as unknown as MessageEvent);
+        },
+      )
+      .then(() => subject.complete())
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        subject.next({ type: 'agent_error', data: JSON.stringify({ type: 'agent_error', message }) } as unknown as MessageEvent);
+        subject.complete();
+      });
+
+    return subject.asObservable();
   }
 
   /**

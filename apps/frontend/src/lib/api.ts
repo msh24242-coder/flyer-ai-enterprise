@@ -126,7 +126,7 @@ export const api = {
   approvals: {
     list: (companyId: string, token: string, status?: string) => {
       const qs = status ? `?status=${status}` : '';
-      return request<Array<{ id: string; toolName: string; status: string; createdAt: string }>>(`/companies/${companyId}/approvals${qs}`, { token });
+      return request<Array<{ id: string; toolName: string; status: string; agentType: string; toolInput: unknown; reason?: string; reviewNote?: string; createdAt: string }>>(`/companies/${companyId}/approvals${qs}`, { token });
     },
     approve: (companyId: string, token: string, id: string, reviewNote?: string) =>
       request<unknown>(`/companies/${companyId}/approvals/${id}/approve`, { method: 'PATCH', token, body: JSON.stringify({ reviewNote }) }),

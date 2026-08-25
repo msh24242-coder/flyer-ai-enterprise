@@ -10,7 +10,6 @@ import { ApprovalEngineService } from './approval/approval-engine.service';
 import { MemoryService } from './memory/memory.service';
 import { MemoryWriteProcessor } from './memory/memory-write.processor';
 import { AgentOrchestratorService } from './orchestration/agent-orchestrator.service';
-import { AgentTaskProcessor } from './orchestration/agent-task.processor';
 
 @Module({
   imports: [
@@ -37,7 +36,6 @@ import { AgentTaskProcessor } from './orchestration/agent-task.processor';
     MemoryService,
     MemoryWriteProcessor,
     AgentOrchestratorService,
-    AgentTaskProcessor,
   ],
   exports: [
     AI_PROVIDER,
