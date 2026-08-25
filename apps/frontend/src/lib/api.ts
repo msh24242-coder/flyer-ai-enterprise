@@ -145,6 +145,19 @@ export const api = {
       request<void>(`/companies/${companyId}/knowledge/${knowledgeId}`, { method: 'DELETE', token }),
   },
 
+  content: {
+    list: (companyId: string, token: string, contentType?: string, agentType?: string) => {
+      const qs = new URLSearchParams();
+      if (contentType) qs.set('contentType', contentType);
+      if (agentType) qs.set('agentType', agentType);
+      return request<Array<{ id: string; agentType: string; contentType: string; title?: string; content: string; createdAt: string }>>(`/companies/${companyId}/content?${qs}`, { token });
+    },
+    getOne: (companyId: string, token: string, id: string) =>
+      request<{ id: string; agentType: string; contentType: string; title?: string; content: string; createdAt: string }>(`/companies/${companyId}/content/${id}`, { token }),
+    delete: (companyId: string, token: string, id: string) =>
+      request<void>(`/companies/${companyId}/content/${id}`, { method: 'DELETE', token }),
+  },
+
   approvals: {
     list: (companyId: string, token: string, status?: string) => {
       const qs = status ? `?status=${status}` : '';

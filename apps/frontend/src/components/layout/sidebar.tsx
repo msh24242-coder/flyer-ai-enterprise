@@ -146,10 +146,32 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom links */}
-      <div className="border-t border-gray-800 px-3 py-3">
+      <div className="border-t border-gray-800 px-3 py-3 space-y-0.5">
+        <Link
+          href={'/company' as never}
+          className={twMerge(
+            'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+            pathname === '/company'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+          )}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87" />
+            <path d="M16 3.13a4 4 0 010 7.75" />
+          </svg>
+          Company
+        </Link>
         <Link
           href={'/settings' as never}
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+          className={twMerge(
+            'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+            pathname === '/settings'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+          )}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
             <circle cx="12" cy="12" r="3" />
