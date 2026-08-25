@@ -120,18 +120,44 @@ export const api = {
   },
 
   goals: {
-    list: (companyId: string, token: string) =>
-      request<Array<{ id: string; title: string; status: string; description?: string; targetDate?: string }>>(`/companies/${companyId}/marketing/goals`, { token }),
+    list: (companyId: string, token: string, status?: string) => {
+      const qs = status ? `?status=${status}` : '';
+      return request<Array<{ id: string; title: string; status: string; description?: string; targetDate?: string }>>(`/companies/${companyId}/marketing/goals${qs}`, { token });
+    },
+    create: (companyId: string, token: string, data: { title: string; description?: string; status?: string; targetDate?: string }) =>
+      request<{ id: string; title: string; status: string; description?: string; targetDate?: string }>(`/companies/${companyId}/marketing/goals`, { method: 'POST', token, body: JSON.stringify(data) }),
+    update: (companyId: string, token: string, goalId: string, data: { title?: string; description?: string; status?: string; targetDate?: string }) =>
+      request<{ id: string; title: string; status: string; description?: string; targetDate?: string }>(`/companies/${companyId}/marketing/goals/${goalId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
+    delete: (companyId: string, token: string, goalId: string) =>
+      request<void>(`/companies/${companyId}/marketing/goals/${goalId}`, { method: 'DELETE', token }),
   },
 
   campaigns: {
-    list: (companyId: string, token: string) =>
-      request<Array<{ id: string; title: string; status: string; budget?: number; startDate?: string; endDate?: string }>>(`/companies/${companyId}/marketing/campaigns`, { token }),
+    list: (companyId: string, token: string, status?: string, goalId?: string) => {
+      const qs = new URLSearchParams();
+      if (status) qs.set('status', status);
+      if (goalId) qs.set('goalId', goalId);
+      return request<Array<{ id: string; title: string; status: string; budget?: number; startDate?: string; endDate?: string }>>(`/companies/${companyId}/marketing/campaigns?${qs}`, { token });
+    },
+    create: (companyId: string, token: string, data: { title: string; description?: string; goalId?: string; status?: string; budget?: number; startDate?: string; endDate?: string }) =>
+      request<{ id: string; title: string; status: string; budget?: number; startDate?: string; endDate?: string }>(`/companies/${companyId}/marketing/campaigns`, { method: 'POST', token, body: JSON.stringify(data) }),
+    update: (companyId: string, token: string, campaignId: string, data: { title?: string; description?: string; status?: string; budget?: number; startDate?: string; endDate?: string }) =>
+      request<{ id: string; title: string; status: string; budget?: number }>(`/companies/${companyId}/marketing/campaigns/${campaignId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
+    delete: (companyId: string, token: string, campaignId: string) =>
+      request<void>(`/companies/${companyId}/marketing/campaigns/${campaignId}`, { method: 'DELETE', token }),
   },
 
   tasks: {
-    list: (companyId: string, token: string) =>
-      request<Array<{ id: string; title: string; status: string; priority: string; dueDate?: string }>>(`/companies/${companyId}/marketing/tasks`, { token }),
+    list: (companyId: string, token: string, campaignId?: string) => {
+      const qs = campaignId ? `?campaignId=${campaignId}` : '';
+      return request<Array<{ id: string; title: string; status: string; priority: string; dueDate?: string }>>(`/companies/${companyId}/marketing/tasks${qs}`, { token });
+    },
+    create: (companyId: string, token: string, data: { title: string; description?: string; campaignId?: string; status?: string; priority?: string; dueDate?: string }) =>
+      request<{ id: string; title: string; status: string; priority: string; dueDate?: string }>(`/companies/${companyId}/marketing/tasks`, { method: 'POST', token, body: JSON.stringify(data) }),
+    update: (companyId: string, token: string, taskId: string, data: { title?: string; status?: string; priority?: string; dueDate?: string }) =>
+      request<{ id: string; title: string; status: string; priority: string }>(`/companies/${companyId}/marketing/tasks/${taskId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
+    delete: (companyId: string, token: string, taskId: string) =>
+      request<void>(`/companies/${companyId}/marketing/tasks/${taskId}`, { method: 'DELETE', token }),
   },
 
   knowledge: {

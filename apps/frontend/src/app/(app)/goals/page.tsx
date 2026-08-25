@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,8 @@ export default function GoalsPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
@@ -47,31 +49,51 @@ export default function GoalsPage() {
     }
   }
 
-  useEffect(() => { loadGoals(); }, [user, accessToken]);
+  useEffect(() => { void loadGoals(); }, [user, accessToken]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!newTitle.trim()) return;
     setSaving(true);
+    setError(null);
     try {
-      await api.goals.list(companyId, token); // verify access
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/companies/${companyId}/marketing/goals`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ title: newTitle.trim(), description: newDesc.trim() || undefined }),
-        },
-      );
-      if (!res.ok) throw new ApiError(res.status, await res.text());
+      const goal = await api.goals.create(companyId, token, {
+        title: newTitle.trim(),
+        description: newDesc.trim() || undefined,
+      });
+      setGoals((prev) => [goal, ...prev]);
       setNewTitle('');
       setNewDesc('');
       setCreating(false);
-      await loadGoals();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create goal');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleStatusChange(goalId: string, status: string) {
+    setUpdatingStatusId(goalId);
+    try {
+      const updated = await api.goals.update(companyId, token, goalId, { status });
+      setGoals((prev) => prev.map((g) => g.id === goalId ? { ...g, status: updated.status } : g));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update goal');
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  }
+
+  async function handleDelete(goalId: string) {
+    if (!confirm('Delete this goal?')) return;
+    setDeletingId(goalId);
+    try {
+      await api.goals.delete(companyId, token, goalId);
+      setGoals((prev) => prev.filter((g) => g.id !== goalId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete goal');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -90,14 +112,14 @@ export default function GoalsPage() {
         )}
 
         {creating && (
-          <Card className="mb-6">
-            <form onSubmit={handleCreate} className="flex flex-col gap-4">
+          <Card className="mb-6 p-4">
+            <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4">
               <h3 className="text-sm font-semibold text-gray-900">New Goal</h3>
-              <Input label="Title" required value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-              <Input label="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+              <Input label="Title" required value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g. Grow MQL pipeline by 30% in Q4" />
+              <Input label="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="What does success look like?" />
               <div className="flex gap-2">
-                <Button type="submit" loading={saving} size="sm">Create</Button>
-                <Button variant="secondary" size="sm" onClick={() => setCreating(false)}>Cancel</Button>
+                <Button type="submit" disabled={saving} size="sm">{saving ? 'Creating…' : 'Create'}</Button>
+                <Button variant="secondary" size="sm" onClick={() => { setCreating(false); setNewTitle(''); setNewDesc(''); }}>Cancel</Button>
               </div>
             </form>
           </Card>
@@ -121,7 +143,7 @@ export default function GoalsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-medium text-gray-900">{goal.title}</p>
                     {goal.description && (
-                      <p className="mt-0.5 truncate text-sm text-gray-500">{goal.description}</p>
+                      <p className="mt-0.5 text-sm text-gray-500 line-clamp-2">{goal.description}</p>
                     )}
                     {goal.targetDate && (
                       <p className="mt-1 text-xs text-gray-400">
@@ -129,7 +151,26 @@ export default function GoalsPage() {
                       </p>
                     )}
                   </div>
-                  <Badge variant={statusVariant(goal.status)}>{goal.status}</Badge>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <select
+                      value={goal.status}
+                      onChange={(e) => void handleStatusChange(goal.id, e.target.value)}
+                      disabled={updatingStatusId === goal.id}
+                      className="rounded-lg border border-gray-200 bg-background px-2 py-1 text-xs disabled:opacity-50"
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <Badge variant={statusVariant(goal.status)}>{goal.status}</Badge>
+                    <button
+                      onClick={() => void handleDelete(goal.id)}
+                      disabled={deletingId === goal.id}
+                      className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
+                    >
+                      {deletingId === goal.id ? '…' : 'Delete'}
+                    </button>
+                  </div>
                 </div>
               </Card>
             ))}
