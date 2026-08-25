@@ -12,6 +12,7 @@ import { MarketingDirectorAgent } from './marketing-director.agent';
 import { AgentExecutionResult, AgentStreamEventType } from '../agent-engine/base/agent-engine.types';
 import { CONVERSATION_HISTORY_LIMIT } from '../agent-engine/agent-engine.constants';
 import { MemoryService } from '../agent-engine/memory/memory.service';
+import { AuditService } from '../audit/audit.service';
 
 export interface RunAgentInput {
   companyId: string;
@@ -42,6 +43,7 @@ export class MarketingAgentService {
     private readonly memoryService: MemoryService,
     private readonly agent: MarketingDirectorAgent,
     private readonly config: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
   async run(input: RunAgentInput): Promise<RunAgentOutput> {
@@ -211,17 +213,22 @@ export class MarketingAgentService {
 
   async renameConversation(companyId: string, conversationId: string, userId: string, title: string) {
     await this.verifyConversationOwnership(companyId, conversationId, userId);
-    return this.conversationRepo.rename(companyId, conversationId, title.trim().slice(0, 200));
+    const result = await this.conversationRepo.rename(companyId, conversationId, title.trim().slice(0, 200));
+    void this.auditService.log({ companyId, userId, action: 'CONVERSATION_RENAMED', resource: 'conversation', resourceId: conversationId, after: { title } });
+    return result;
   }
 
   async archiveConversation(companyId: string, conversationId: string, userId: string) {
     await this.verifyConversationOwnership(companyId, conversationId, userId);
-    return this.conversationRepo.archive(companyId, conversationId);
+    const result = await this.conversationRepo.archive(companyId, conversationId);
+    void this.auditService.log({ companyId, userId, action: 'CONVERSATION_ARCHIVED', resource: 'conversation', resourceId: conversationId });
+    return result;
   }
 
   async deleteConversation(companyId: string, conversationId: string, userId: string): Promise<void> {
     await this.verifyConversationOwnership(companyId, conversationId, userId);
     await this.conversationRepo.delete(companyId, conversationId);
+    void this.auditService.log({ companyId, userId, action: 'CONVERSATION_DELETED', resource: 'conversation', resourceId: conversationId });
   }
 
   private async verifyConversationOwnership(companyId: string, conversationId: string, userId: string): Promise<void> {

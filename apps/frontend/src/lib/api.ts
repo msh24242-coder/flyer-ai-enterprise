@@ -84,16 +84,38 @@ export const api = {
 
   company: {
     get: (companyId: string, token: string) =>
-      request<{ id: string; name: string; industry?: string; aiConfig?: unknown }>(`/companies/${companyId}`, { token }),
+      request<{ id: string; name: string; slug: string; industry?: string; website?: string; aiConfig?: unknown }>(`/companies/${companyId}`, { token }),
+
+    update: (companyId: string, token: string, data: { name?: string; industry?: string; website?: string }) =>
+      request<{ id: string; name: string; slug: string; industry?: string; website?: string }>(`/companies/${companyId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
 
     getMembers: (companyId: string, token: string) =>
-      request<Array<{ id: string; email: string; firstName: string; lastName: string; role: string }>>(`/companies/${companyId}/members`, { token }),
+      request<Array<{ id: string; email: string; firstName: string; lastName: string; role: string; isActive: boolean }>>(`/companies/${companyId}/members`, { token }),
+
+    updateMemberRole: (companyId: string, token: string, memberId: string, role: string) =>
+      request<{ id: string; role: string }>(`/companies/${companyId}/members/${memberId}/role`, { method: 'PATCH', token, body: JSON.stringify({ role }) }),
+
+    removeMember: (companyId: string, token: string, memberId: string) =>
+      request<void>(`/companies/${companyId}/members/${memberId}`, { method: 'DELETE', token }),
+
+    getAiConfig: (companyId: string, token: string) =>
+      request<Record<string, unknown>>(`/companies/${companyId}/ai/config`, { token }),
+
+    updateAiConfig: (companyId: string, token: string, config: Record<string, unknown>) =>
+      request<Record<string, unknown>>(`/companies/${companyId}/ai/config`, { method: 'PUT', token, body: JSON.stringify(config) }),
 
     getAiUsage: (companyId: string, token: string, from?: string, to?: string) => {
       const qs = new URLSearchParams();
       if (from) qs.set('from', from);
       if (to) qs.set('to', to);
       return request<unknown>(`/companies/${companyId}/ai/usage?${qs}`, { token });
+    },
+
+    getAuditLogs: (companyId: string, token: string, resource?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      if (resource) qs.set('resource', resource);
+      if (limit) qs.set('limit', String(limit));
+      return request<Array<{ id: string; action: string; resource: string; resourceId?: string; userId?: string; createdAt: string }>>(`/companies/${companyId}/audit?${qs}`, { token });
     },
   },
 
@@ -143,7 +165,16 @@ export const api = {
       }),
 
     listConversations: (companyId: string, token: string) =>
-      request<Array<{ id: string; title: string; createdAt: string; messageCount?: number }>>(`/companies/${companyId}/agents/marketing-director/conversations`, { token }),
+      request<Array<{ id: string; title?: string; status: string; agentType: string; createdAt: string; updatedAt: string; totalCostUsd?: number }>>(`/companies/${companyId}/agents/marketing-director/conversations`, { token }),
+
+    renameConversation: (companyId: string, token: string, conversationId: string, title: string) =>
+      request<{ id: string; title: string }>(`/companies/${companyId}/agents/marketing-director/conversations/${conversationId}`, { method: 'PATCH', token, body: JSON.stringify({ title }) }),
+
+    archiveConversation: (companyId: string, token: string, conversationId: string) =>
+      request<{ id: string; status: string }>(`/companies/${companyId}/agents/marketing-director/conversations/${conversationId}/archive`, { method: 'POST', token, body: '{}' }),
+
+    deleteConversation: (companyId: string, token: string, conversationId: string) =>
+      request<void>(`/companies/${companyId}/agents/marketing-director/conversations/${conversationId}`, { method: 'DELETE', token }),
   },
 };
 

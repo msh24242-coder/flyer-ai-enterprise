@@ -4,6 +4,7 @@ import { CompanyRepository } from '../../company/company.repository';
 import { ConversationRepository } from '../repositories/conversation.repository';
 import { MarketingDirectorAgent } from '../marketing-director.agent';
 import { MemoryService } from '../../agent-engine/memory/memory.service';
+import { AuditService } from '../../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
 import { AgentType } from '@prisma/client';
 
@@ -48,6 +49,10 @@ const mockConfig = {
   get: jest.fn((key: string, def: unknown) => def),
 } as unknown as jest.Mocked<ConfigService>;
 
+const mockAuditService = {
+  log: jest.fn().mockResolvedValue(undefined),
+} as unknown as jest.Mocked<AuditService>;
+
 function makeService(): MarketingAgentService {
   return new MarketingAgentService(
     mockCompanyRepo,
@@ -55,6 +60,7 @@ function makeService(): MarketingAgentService {
     mockMemory,
     mockAgent,
     mockConfig,
+    mockAuditService,
   );
 }
 
