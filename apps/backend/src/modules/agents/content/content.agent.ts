@@ -1,12 +1,14 @@
 import { Injectable, Inject, Scope } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AgentType, PermissionLevel } from '@prisma/client';
+import { AgentType, PermissionLevel, Prisma } from '@prisma/client';
 import { AgentEngine } from '../../agent-engine/base/agent-engine.abstract';
 import {
   AgentToolDefinition,
   AgentExecutionContext,
   AgentIdentity,
   AgentExecutionResult,
+  AgentStreamEventType,
 } from '../../agent-engine/base/agent-engine.types';
 import { IAIProvider } from '../../agent-engine/providers/ai/ai-provider.interface';
 import { IEmbeddingProvider } from '../../agent-engine/providers/embedding/embedding-provider.interface';
@@ -20,7 +22,9 @@ import { PrismaService } from '../../../database/prisma.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ContentAgent extends AgentEngine {
+  private readonly contentLogger = new Logger(ContentAgent.name);
   private ctx: AgentExecutionContext | null = null;
+  private lastToolName: string | null = null;
 
   constructor(
     @Inject(AI_PROVIDER) aiProvider: IAIProvider,
@@ -38,7 +42,43 @@ export class ContentAgent extends AgentEngine {
 
   override async execute(context: AgentExecutionContext): Promise<AgentExecutionResult> {
     this.ctx = context;
-    return super.execute(context);
+    const result = await super.execute(context);
+    await this.persistContent(context, result.response);
+    return result;
+  }
+
+  override async executeStream(
+    context: AgentExecutionContext,
+    onEvent: (event: AgentStreamEventType) => void,
+  ): Promise<AgentExecutionResult> {
+    this.ctx = context;
+    const wrappedOnEvent = (event: AgentStreamEventType) => {
+      if (event.type === 'tool_start') this.lastToolName = event.toolName;
+      onEvent(event);
+    };
+    const result = await super.executeStream(context, wrappedOnEvent);
+    await this.persistContent(context, result.response);
+    return result;
+  }
+
+  private async persistContent(context: AgentExecutionContext, response: string): Promise<void> {
+    if (!response || response.length < 20) return;
+    try {
+      const contentType = this.lastToolName ?? 'general';
+      const title = context.userMessage.slice(0, 100);
+      await this.prisma.generatedContent.create({
+        data: {
+          companyId: context.companyId,
+          agentType: AgentType.CONTENT,
+          contentType,
+          title,
+          content: response,
+          metadata: { model: context.model, tool: contentType } as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      this.contentLogger.error(`Failed to persist generated content: ${String(err)}`);
+    }
   }
 
   getIdentity(): AgentIdentity {
