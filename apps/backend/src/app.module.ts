@@ -12,6 +12,7 @@ import { MarketingAgentModule } from './modules/marketing-director/marketing-age
 import { AgentsModule } from './modules/agents/agents.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { ContentModule } from './modules/content/content.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ContentModule } from './modules/content/content.module';
     AgentsModule,
     ApprovalsModule,
     ContentModule,
+    AuditModule,
   ],
   providers: [
     {

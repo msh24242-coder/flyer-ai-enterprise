@@ -8,6 +8,8 @@ import { ContentAgent } from './content/content.agent';
 import { ResearchAgent } from './research/research.agent';
 import { SocialMediaAgent } from './social/social-media.agent';
 import { AgentDispatchProcessor } from './agent-dispatch.processor';
+import { AgentWorkflowService } from './workflow/agent-workflow.service';
+import { AgentWorkflowController } from './workflow/agent-workflow.controller';
 import { MarketingRepository } from '../marketing-director/repositories/marketing.repository';
 import { DatabaseModule } from '../../database/database.module';
 
@@ -18,7 +20,8 @@ import { DatabaseModule } from '../../database/database.module';
     DatabaseModule,
     BullModule.registerQueue({ name: QUEUE_AGENT_TASKS }),
   ],
-  providers: [StrategyAgent, ContentAgent, ResearchAgent, SocialMediaAgent, MarketingRepository, AgentDispatchProcessor],
-  exports: [StrategyAgent, ContentAgent, ResearchAgent, SocialMediaAgent],
+  controllers: [AgentWorkflowController],
+  providers: [StrategyAgent, ContentAgent, ResearchAgent, SocialMediaAgent, MarketingRepository, AgentDispatchProcessor, AgentWorkflowService],
+  exports: [StrategyAgent, ContentAgent, ResearchAgent, SocialMediaAgent, AgentWorkflowService],
 })
 export class AgentsModule {}

@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { CompanyService } from './company.service';
+import { AuditService } from '../audit/audit.service';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { CreateKnowledgeDto, UpdateKnowledgeDto } from './dto/company-knowledge.dto';
@@ -26,7 +27,10 @@ import { SafeMember } from './company.repository';
 @UseGuards(JwtAuthGuard)
 @Controller('companies/:companyId')
 export class CompanyController {
-  constructor(private readonly companyService: CompanyService) {}
+  constructor(
+    private readonly companyService: CompanyService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get()
   async getCompany(
@@ -140,5 +144,22 @@ export class CompanyController {
     @Query('to') to?: string,
   ) {
     return this.companyService.getAiUsage(companyId, user.id, from, to);
+  }
+
+  // ─── Audit Logs ───────────────────────────────────────────────────────────
+
+  @Get('audit')
+  async getAuditLogs(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('resource') resource?: string,
+    @Query('limit') limit?: string,
+  ) {
+    await this.companyService.getCompany(companyId, user.id);
+    return this.auditService.list(companyId, {
+      resource,
+      userId: user.id,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
   }
 }
