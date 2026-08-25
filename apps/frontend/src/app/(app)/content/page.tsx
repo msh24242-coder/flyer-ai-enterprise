@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
+import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
 type ContentItem = {
   id: string;
@@ -43,6 +42,7 @@ export default function ContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
@@ -50,22 +50,23 @@ export default function ContentPage() {
   useEffect(() => {
     if (!companyId || !token) return;
     setLoading(true);
-    const qs = filter !== 'all' ? `?contentType=${filter}` : '';
-    fetch(`${API_BASE}/companies/${companyId}/content${qs}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
+    api.content.list(companyId, token, filter !== 'all' ? filter : undefined)
       .then(setItems)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load content'))
       .finally(() => setLoading(false));
   }, [user, accessToken, filter]);
 
   async function handleDelete(id: string) {
-    await fetch(`${API_BASE}/companies/${companyId}/content/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    if (!confirm('Delete this content?')) return;
+    setDeletingId(id);
+    try {
+      await api.content.delete(companyId, token, id);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete content');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const contentTypes = [...new Set(items.map((i) => i.contentType))];
@@ -140,10 +141,11 @@ export default function ContentPage() {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
-                      className="text-xs text-red-500 hover:text-red-700"
+                      onClick={(e) => { e.stopPropagation(); void handleDelete(item.id); }}
+                      disabled={deletingId === item.id}
+                      className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
                     >
-                      Delete
+                      {deletingId === item.id ? '…' : 'Delete'}
                     </button>
                     <svg
                       viewBox="0 0 24 24"
