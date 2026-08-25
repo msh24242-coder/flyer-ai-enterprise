@@ -41,14 +41,7 @@ export default function SettingsPage() {
     setError(null);
     setSuccess(false);
     try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/companies/${companyId}/ai/config`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(aiConfig),
-        },
-      );
+      await api.company.updateAiConfig(companyId, token, aiConfig as Record<string, unknown>);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
