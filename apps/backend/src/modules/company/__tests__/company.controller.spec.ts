@@ -1,4 +1,4 @@
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { CompanyController } from '../company.controller';
 import { CompanyService } from '../company.service';
 import { AuditService } from '../../audit/audit.service';
