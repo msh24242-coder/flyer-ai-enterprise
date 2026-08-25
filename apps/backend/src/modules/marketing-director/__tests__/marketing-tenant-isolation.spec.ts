@@ -29,6 +29,10 @@ const mockConvRepo = {
   addMessage: jest.fn(),
   incrementCost: jest.fn(),
   listByCompany: jest.fn(),
+  updateTitle: jest.fn(),
+  rename: jest.fn(),
+  archive: jest.fn(),
+  delete: jest.fn(),
 } as unknown as jest.Mocked<ConversationRepository>;
 
 const mockAgent = {

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AgentType, Conversation, Message, Prisma } from '@prisma/client';
+import { AgentType, Conversation, ConversationStatus, Message, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database/prisma.service';
 import { CanonicalMessage } from '../../../common/types/canonical.types';
 
@@ -55,8 +55,35 @@ export class ConversationRepository {
 
   async listByCompany(companyId: string, userId?: string): Promise<Conversation[]> {
     return this.prisma.conversation.findMany({
-      where: { companyId, ...(userId ? { userId } : {}), status: 'ACTIVE' },
+      where: { companyId, ...(userId ? { userId } : {}), status: ConversationStatus.ACTIVE },
       orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  async rename(companyId: string, conversationId: string, title: string): Promise<Conversation> {
+    return this.prisma.conversation.update({
+      where: { id: conversationId, companyId },
+      data: { title },
+    });
+  }
+
+  async archive(companyId: string, conversationId: string): Promise<Conversation> {
+    return this.prisma.conversation.update({
+      where: { id: conversationId, companyId },
+      data: { status: ConversationStatus.ARCHIVED },
+    });
+  }
+
+  async delete(companyId: string, conversationId: string): Promise<void> {
+    await this.prisma.conversation.delete({
+      where: { id: conversationId, companyId },
+    });
+  }
+
+  async updateTitle(companyId: string, conversationId: string, title: string): Promise<void> {
+    await this.prisma.conversation.updateMany({
+      where: { id: conversationId, companyId, title: null },
+      data: { title },
     });
   }
 

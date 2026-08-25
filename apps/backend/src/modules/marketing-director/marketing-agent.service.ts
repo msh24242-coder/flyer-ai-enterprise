@@ -122,6 +122,12 @@ export class MarketingAgentService {
       result.traceResult.estimatedCostUsd,
     );
 
+    // 9. Auto-generate title from first AI response if conversation has none
+    if (!input.conversationId) {
+      const autoTitle = this.generateTitle(result.response);
+      await this.conversationRepo.updateTitle(input.companyId, conversationId, autoTitle);
+    }
+
     return {
       conversationId,
       response: result.response,
@@ -178,6 +184,11 @@ export class MarketingAgentService {
     await this.conversationRepo.addMessage(conversationId, 'assistant', result.response, result.traceResult.totalOutputTokens);
     await this.conversationRepo.incrementCost(conversationId, result.traceResult.estimatedCostUsd);
 
+    if (!input.conversationId) {
+      const autoTitle = this.generateTitle(result.response);
+      await this.conversationRepo.updateTitle(input.companyId, conversationId, autoTitle);
+    }
+
     return {
       conversationId,
       response: result.response,
@@ -191,12 +202,47 @@ export class MarketingAgentService {
   }
 
   async listConversations(companyId: string, userId: string) {
-    // Verify membership before listing
     const member = await this.companyRepo.findMemberInCompany(companyId, userId);
     if (!member || !member.isActive) {
       throw new ForbiddenException('Access denied to this company');
     }
     return this.conversationRepo.listByCompany(companyId, userId);
+  }
+
+  async renameConversation(companyId: string, conversationId: string, userId: string, title: string) {
+    await this.verifyConversationOwnership(companyId, conversationId, userId);
+    return this.conversationRepo.rename(companyId, conversationId, title.trim().slice(0, 200));
+  }
+
+  async archiveConversation(companyId: string, conversationId: string, userId: string) {
+    await this.verifyConversationOwnership(companyId, conversationId, userId);
+    return this.conversationRepo.archive(companyId, conversationId);
+  }
+
+  async deleteConversation(companyId: string, conversationId: string, userId: string): Promise<void> {
+    await this.verifyConversationOwnership(companyId, conversationId, userId);
+    await this.conversationRepo.delete(companyId, conversationId);
+  }
+
+  private async verifyConversationOwnership(companyId: string, conversationId: string, userId: string): Promise<void> {
+    const member = await this.companyRepo.findMemberInCompany(companyId, userId);
+    if (!member || !member.isActive) throw new ForbiddenException('Access denied to this company');
+    const conv = await this.conversationRepo.findById(companyId, conversationId);
+    if (!conv) throw new NotFoundException('Conversation not found');
+    if (conv.userId !== userId) throw new ForbiddenException('You do not own this conversation');
+  }
+
+  private generateTitle(aiResponse: string): string {
+    const stripped = aiResponse
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
+      .replace(/`[^`]+`/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (stripped.length <= 80) return stripped;
+    const sentence = stripped.match(/^[^.!?]+[.!?]/)?.[0];
+    if (sentence && sentence.length <= 80) return sentence.trim();
+    return stripped.slice(0, 77) + '...';
   }
 
   private extractConversationTitle(message: string): string {

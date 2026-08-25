@@ -2,6 +2,8 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
+  Delete,
   Body,
   Param,
   ParseUUIDPipe,
@@ -86,8 +88,6 @@ export class MarketingAgentController {
 
   /**
    * GET /companies/:companyId/agents/marketing-director/conversations
-   *
-   * Lists conversations for the authenticated user within this company.
    */
   @Get('conversations')
   async listConversations(
@@ -95,5 +95,47 @@ export class MarketingAgentController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.agentService.listConversations(companyId, user.id);
+  }
+
+  /**
+   * PATCH /companies/:companyId/agents/marketing-director/conversations/:conversationId
+   * Rename a conversation.
+   */
+  @Patch('conversations/:conversationId')
+  async renameConversation(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+    @Body() body: { title: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.agentService.renameConversation(companyId, conversationId, user.id, body.title);
+  }
+
+  /**
+   * POST /companies/:companyId/agents/marketing-director/conversations/:conversationId/archive
+   * Archive a conversation.
+   */
+  @Post('conversations/:conversationId/archive')
+  @HttpCode(HttpStatus.OK)
+  async archiveConversation(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.agentService.archiveConversation(companyId, conversationId, user.id);
+  }
+
+  /**
+   * DELETE /companies/:companyId/agents/marketing-director/conversations/:conversationId
+   * Permanently delete a conversation and all its messages.
+   */
+  @Delete('conversations/:conversationId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteConversation(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.agentService.deleteConversation(companyId, conversationId, user.id);
   }
 }
