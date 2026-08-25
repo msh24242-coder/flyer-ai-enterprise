@@ -199,7 +199,7 @@ export default function ChatPage() {
 
     try {
       const res = await fetch(
-        `${config.backendUrl}/companies/${config.companyId}/agents/marketing-director/run`,
+        `${config.backendUrl}/api/v1/companies/${config.companyId}/agents/marketing-director/run`,
         {
           method: 'POST',
           headers: {
