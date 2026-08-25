@@ -111,6 +111,13 @@
 - [x] `/company` — company profile + member management (role updates, deactivation)
 - [x] Budget enforcement in `MarketingAgentService.run()` (30-day rolling spend check)
 
+### Phase 9 — Workflows & Polish
+- [x] `/workflows` — multi-agent workflow trigger UI (full_campaign, content_sprint, research_then_strategy)
+- [x] `api.workflows.trigger()` + `api.workflows.getTaskStatus()` in frontend API client
+- [x] `TriggerWorkflowDto` with class-validator decorators (workflowType, message, conversationId, model)
+- [x] `ResolveApprovalDto` with class-validator decorators (reviewNote, max 1000 chars)
+- [x] Sidebar navigation includes Workflows link
+
 ### Infrastructure
 - [x] `.env.example` (no real secrets committed)
 - [x] GitHub Actions CI (`ci.yml`) — lint + typecheck + test + build for backend and frontend

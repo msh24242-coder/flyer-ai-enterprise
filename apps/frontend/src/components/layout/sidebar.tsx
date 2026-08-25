@@ -87,6 +87,18 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: '/workflows',
+    label: 'Workflows',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <path d="M17.5 17.5l2 2M21 14.5a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0z" />
+      </svg>
+    ),
+  },
+  {
     href: '/approvals',
     label: 'Approvals',
     icon: (
