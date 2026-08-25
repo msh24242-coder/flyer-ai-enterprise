@@ -11,6 +11,8 @@ import { StrategyAgent } from './strategy/strategy.agent';
 import { ContentAgent } from './content/content.agent';
 import { ResearchAgent } from './research/research.agent';
 import { SocialMediaAgent } from './social/social-media.agent';
+import { PerformanceAgent } from './performance/performance.agent';
+import { AnalyticsAgent } from './analytics/analytics.agent';
 
 interface AgentTaskJobData {
   agentTaskId: string;
@@ -65,6 +67,14 @@ export class AgentDispatchProcessor extends WorkerHost {
         result = execResult.response;
       } else if (targetAgentType === AgentType.SOCIAL) {
         const agent = await this.moduleRef.resolve(SocialMediaAgent, contextId, { strict: false });
+        const execResult = await agent.execute(context);
+        result = execResult.response;
+      } else if (targetAgentType === AgentType.PERFORMANCE) {
+        const agent = await this.moduleRef.resolve(PerformanceAgent, contextId, { strict: false });
+        const execResult = await agent.execute(context);
+        result = execResult.response;
+      } else if (targetAgentType === AgentType.ANALYTICS) {
+        const agent = await this.moduleRef.resolve(AnalyticsAgent, contextId, { strict: false });
         const execResult = await agent.execute(context);
         result = execResult.response;
       } else {
