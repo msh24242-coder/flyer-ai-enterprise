@@ -52,6 +52,12 @@ const mockAuditService = {
   log: jest.fn().mockResolvedValue(undefined),
 } as unknown as jest.Mocked<AuditService>;
 
+const mockPrisma = {
+  agentExecution: {
+    aggregate: jest.fn().mockResolvedValue({ _sum: { estimatedCostUsd: 0 } }),
+  },
+};
+
 function makeService(): MarketingAgentService {
   return new MarketingAgentService(
     mockCompanyRepo,
@@ -60,6 +66,7 @@ function makeService(): MarketingAgentService {
     mockAgent,
     mockConfig,
     mockAuditService,
+    mockPrisma as never,
   );
 }
 

@@ -274,16 +274,21 @@ export class CompanyService {
       byAgent[key].costUsd += Number(e.estimatedCostUsd ?? 0);
     }
 
+    const byAgentArray = Object.entries(byAgent).map(([agentType, stats]) => ({
+      agentType,
+      executions: stats.executions,
+      totalCostUsd: Number(stats.costUsd.toFixed(6)),
+      totalTokens: stats.inputTokens + stats.outputTokens,
+    }));
+
     return {
-      period: { from: from.toISOString(), to: to.toISOString() },
-      totals: {
-        executions: executions.length,
-        inputTokens: totalInputTokens,
-        outputTokens: totalOutputTokens,
-        totalTokens: totalInputTokens + totalOutputTokens,
-        estimatedCostUsd: totalCostUsd.toFixed(4),
-      },
-      byAgent,
+      totalExecutions: executions.length,
+      totalCostUsd: Number(totalCostUsd.toFixed(6)),
+      totalInputTokens,
+      totalOutputTokens,
+      byAgent: byAgentArray,
+      fromDate: from.toISOString(),
+      toDate: to.toISOString(),
     };
   }
 

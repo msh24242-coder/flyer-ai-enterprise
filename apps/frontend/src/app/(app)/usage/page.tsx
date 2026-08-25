@@ -14,8 +14,8 @@ type UsageData = {
   totalInputTokens: number;
   totalOutputTokens: number;
   byAgent: AgentUsage[];
-  fromDate: string;
-  toDate: string;
+  fromDate: string; // ISO date string
+  toDate: string;   // ISO date string
 };
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {

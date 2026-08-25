@@ -2,12 +2,14 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AgentType } from '@prisma/client';
 import { CompanyRepository } from '../company/company.repository';
 import { ConversationRepository } from './repositories/conversation.repository';
+import { PrismaService } from '../../database/prisma.service';
 import { MarketingDirectorAgent } from './marketing-director.agent';
 import { AgentExecutionResult, AgentStreamEventType } from '../agent-engine/base/agent-engine.types';
 import { CONVERSATION_HISTORY_LIMIT } from '../agent-engine/agent-engine.constants';
@@ -44,6 +46,7 @@ export class MarketingAgentService {
     private readonly agent: MarketingDirectorAgent,
     private readonly config: ConfigService,
     private readonly auditService: AuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async run(input: RunAgentInput): Promise<RunAgentOutput> {
@@ -81,10 +84,13 @@ export class MarketingAgentService {
     const company = await this.companyRepo.findById(input.companyId);
     const knowledge = await this.memoryService.getCompanyKnowledge(input.companyId);
 
-    // 5. Persist user message
+    // 5. Enforce budget limits if configured
+    await this.enforceBudget(input.companyId, company);
+
+    // 6. Persist user message
     await this.conversationRepo.addMessage(conversationId, 'user', input.message);
 
-    // 6. Execute agent
+    // 7. Execute agent
     const model = input.model ?? this.config.get<string>('AI_MODEL', 'claude-opus-5');
     let result: AgentExecutionResult;
     try {
@@ -110,7 +116,7 @@ export class MarketingAgentService {
       throw err;
     }
 
-    // 7. Persist assistant response
+    // 8. Persist assistant response
     await this.conversationRepo.addMessage(
       conversationId,
       'assistant',
@@ -118,13 +124,13 @@ export class MarketingAgentService {
       result.traceResult.totalOutputTokens,
     );
 
-    // 8. Increment conversation cost
+    // 9. Increment conversation cost
     await this.conversationRepo.incrementCost(
       conversationId,
       result.traceResult.estimatedCostUsd,
     );
 
-    // 9. Auto-generate title from first AI response if conversation has none
+    // 10. Auto-generate title from first AI response if conversation has none
     if (!input.conversationId) {
       const autoTitle = this.generateTitle(result.response);
       await this.conversationRepo.updateTitle(input.companyId, conversationId, autoTitle);
@@ -229,6 +235,25 @@ export class MarketingAgentService {
     await this.verifyConversationOwnership(companyId, conversationId, userId);
     await this.conversationRepo.delete(companyId, conversationId);
     void this.auditService.log({ companyId, userId, action: 'CONVERSATION_DELETED', resource: 'conversation', resourceId: conversationId });
+  }
+
+  private async enforceBudget(companyId: string, company: { aiConfig?: unknown } | null): Promise<void> {
+    const aiConfig = (company?.aiConfig ?? {}) as Record<string, unknown>;
+    const monthlyBudgetUsd = typeof aiConfig.monthlyBudgetUsd === 'number' ? aiConfig.monthlyBudgetUsd : null;
+    if (!monthlyBudgetUsd) return;
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const result = await this.prisma.agentExecution.aggregate({
+      where: { companyId, createdAt: { gte: thirtyDaysAgo } },
+      _sum: { estimatedCostUsd: true },
+    });
+    const spent = Number(result._sum.estimatedCostUsd ?? 0);
+
+    if (spent >= monthlyBudgetUsd) {
+      throw new BadRequestException(
+        `Monthly AI budget of $${monthlyBudgetUsd} has been reached ($${spent.toFixed(4)} spent). Update your budget in Settings to continue.`,
+      );
+    }
   }
 
   private async verifyConversationOwnership(companyId: string, conversationId: string, userId: string): Promise<void> {

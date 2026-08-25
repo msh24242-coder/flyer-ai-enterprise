@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { MarketingAgentService } from '../marketing-agent.service';
 import { CompanyRepository } from '../../company/company.repository';
 import { ConversationRepository } from '../repositories/conversation.repository';
@@ -53,6 +53,12 @@ const mockAuditService = {
   log: jest.fn().mockResolvedValue(undefined),
 } as unknown as jest.Mocked<AuditService>;
 
+const mockPrisma = {
+  agentExecution: {
+    aggregate: jest.fn().mockResolvedValue({ _sum: { estimatedCostUsd: 0 } }),
+  },
+};
+
 function makeService(): MarketingAgentService {
   return new MarketingAgentService(
     mockCompanyRepo,
@@ -61,6 +67,7 @@ function makeService(): MarketingAgentService {
     mockAgent,
     mockConfig,
     mockAuditService,
+    mockPrisma as never,
   );
 }
 
@@ -234,6 +241,31 @@ describe('MarketingAgentService', () => {
         expect.objectContaining({ category: 'brand', key: 'voice' }),
       ]),
     });
+  });
+
+  // ── Budget enforcement ────────────────────────────────────────────────────
+
+  it('throws BadRequestException when monthly budget is exceeded', async () => {
+    mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+    mockCompanyRepo.findById.mockResolvedValue({ id: COMPANY_A, name: 'Acme', aiConfig: { monthlyBudgetUsd: 10 } } as never);
+    mockPrisma.agentExecution.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 10.5 } });
+
+    await expect(
+      service.run({ companyId: COMPANY_A, userId: USER_A, message: 'Hello' }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(mockAgent.execute).not.toHaveBeenCalled();
+  });
+
+  it('proceeds when spend is below budget', async () => {
+    mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+    mockCompanyRepo.findById.mockResolvedValue({ id: COMPANY_A, name: 'Acme', aiConfig: { monthlyBudgetUsd: 100 } } as never);
+    mockPrisma.agentExecution.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 5 } });
+    mockConvRepo.create.mockResolvedValue({ id: 'conv-1' } as never);
+
+    await service.run({ companyId: COMPANY_A, userId: USER_A, message: 'Hello' });
+
+    expect(mockAgent.execute).toHaveBeenCalled();
   });
 
   // ── Output ────────────────────────────────────────────────────────────────
