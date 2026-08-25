@@ -1,7 +1,7 @@
 # Implementation Status — AI Marketing OS
 
 **Last updated:** 2026-08-25  
-**Current state:** All phases complete — 395 tests passing
+**Current state:** All phases complete — 435 tests passing
 
 ---
 
@@ -9,7 +9,7 @@
 
 | Check | Status |
 |-------|--------|
-| Backend tests | ✅ 395/395 passing (30 suites) |
+| Backend tests | ✅ 435/435 passing (36 suites) |
 | Backend TypeScript | ✅ Clean |
 | Backend ESLint | ✅ Clean |
 | Backend build | ✅ `nest build` success |
@@ -124,30 +124,31 @@
 
 ## Technical Debt / Known Limitations
 
-1. **SSE streaming** — SSE endpoint wraps the non-streaming `run()` promise in an Observable; token-by-token streaming requires Anthropic SDK streaming integration
-2. **AgentTaskProcessor** — Sub-agent handlers dispatch agent context but AI execution is stubbed until real agent instances are injected into BullMQ processor scope
-3. **No E2E / integration tests** — unit tests only; real DB/Redis integration tests would need a test container setup
+1. **No E2E / integration tests** — unit tests only; real DB/Redis integration tests would need a test container setup with Testcontainers or a dedicated test database
 
 ---
 
-## Test Coverage Summary (30 suites, 395 tests)
+## Test Coverage Summary (36 suites, 435 tests)
 
 | Module | Test File | Tests |
 |--------|-----------|-------|
 | Auth | auth.service.spec | 11 |
 | Auth | auth.repository.spec | 14 |
+| Auth | auth.controller.spec | 6 |
 | Company | company.service.spec | 17 |
 | Company | company.repository.spec | 11 |
 | Company | company.controller.spec | 15 |
 | Company | tenant-isolation.spec | 6 |
 | Marketing Director | marketing-director.agent.spec | 6 |
 | Marketing Director | marketing-agent.service.spec | 13 |
+| Marketing Director | marketing-agent.controller.spec | 6 |
 | Marketing Director | marketing.controller.spec | 24 |
 | Marketing Director | marketing.repository.spec | 23 |
 | Marketing Director | marketing-tenant-isolation.spec | 6 |
 | Marketing Director | conversation.repository.spec | 13 |
 | Agents | agent-contracts.spec | 42 |
 | Agents | agent-dispatch.processor.spec | 12 |
+| Agents | agent-workflow.controller.spec | 7 |
 | Agents | strategy.agent.spec | 5 |
 | Agents | research.agent.spec | 5 |
 | Agents | content.agent.spec | 11 |
@@ -162,5 +163,8 @@
 | Agent Engine | observability-tracer.service.spec | 10 |
 | Agent Engine | ai-provider.factory.spec | 4 |
 | Approvals | approvals.service.spec | 12 |
+| Approvals | approvals.controller.spec | 6 |
+| Approvals | approvals.repository.spec | 8 |
 | Audit | audit.service.spec | 6 |
 | Content | content.repository.spec | 8 |
+| Content | content.controller.spec | 7 |
