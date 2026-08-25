@@ -147,6 +147,78 @@ describe('MarketingAgentService', () => {
     expect(mockConvRepo.listByCompany).not.toHaveBeenCalled();
   });
 
+  // ── Conversation management ───────────────────────────────────────────────
+
+  describe('listConversations', () => {
+    it('returns conversations for an active member', async () => {
+      const convs = [{ id: 'conv-1', title: 'Q4 Planning', status: 'ACTIVE' }];
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.listByCompany.mockResolvedValue(convs as never);
+
+      const result = await service.listConversations(COMPANY_A, USER_A);
+
+      expect(result).toEqual(convs);
+      expect(mockConvRepo.listByCompany).toHaveBeenCalledWith(COMPANY_A, USER_A);
+    });
+  });
+
+  describe('renameConversation', () => {
+    it('renames a conversation the user owns', async () => {
+      const updated = { id: 'conv-1', title: 'New Title' };
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.findById.mockResolvedValue({ id: 'conv-1', companyId: COMPANY_A, userId: USER_A } as never);
+      mockConvRepo.rename.mockResolvedValue(updated as never);
+
+      const result = await service.renameConversation(COMPANY_A, 'conv-1', USER_A, 'New Title');
+
+      expect(result).toEqual(updated);
+      expect(mockConvRepo.rename).toHaveBeenCalledWith(COMPANY_A, 'conv-1', 'New Title');
+    });
+
+    it('throws ForbiddenException when user does not own the conversation', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.findById.mockResolvedValue({ id: 'conv-1', companyId: COMPANY_A, userId: 'other-user' } as never);
+
+      await expect(
+        service.renameConversation(COMPANY_A, 'conv-1', USER_A, 'Stolen Title'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('archiveConversation', () => {
+    it('archives a conversation the user owns', async () => {
+      const archived = { id: 'conv-1', status: 'ARCHIVED' };
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.findById.mockResolvedValue({ id: 'conv-1', companyId: COMPANY_A, userId: USER_A } as never);
+      mockConvRepo.archive.mockResolvedValue(archived as never);
+
+      const result = await service.archiveConversation(COMPANY_A, 'conv-1', USER_A);
+
+      expect(result).toEqual(archived);
+      expect(mockConvRepo.archive).toHaveBeenCalledWith(COMPANY_A, 'conv-1');
+    });
+  });
+
+  describe('deleteConversation', () => {
+    it('deletes a conversation the user owns', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.findById.mockResolvedValue({ id: 'conv-1', companyId: COMPANY_A, userId: USER_A } as never);
+      mockConvRepo.delete.mockResolvedValue(undefined);
+
+      await expect(service.deleteConversation(COMPANY_A, 'conv-1', USER_A)).resolves.toBeUndefined();
+      expect(mockConvRepo.delete).toHaveBeenCalledWith(COMPANY_A, 'conv-1');
+    });
+
+    it('throws NotFoundException when conversation does not exist', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.deleteConversation(COMPANY_A, 'no-such-conv', USER_A),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   // ── Conversation creation ─────────────────────────────────────────────────
 
   it('creates a new conversation when none provided', async () => {

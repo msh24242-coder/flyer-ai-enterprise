@@ -215,6 +215,30 @@ export const api = {
     deleteConversation: (companyId: string, token: string, conversationId: string) =>
       request<void>(`/companies/${companyId}/agents/marketing-director/conversations/${conversationId}`, { method: 'DELETE', token }),
   },
+
+  workflows: {
+    trigger: (
+      companyId: string,
+      token: string,
+      workflowType: 'full_campaign' | 'content_sprint' | 'research_then_strategy',
+      message: string,
+      conversationId?: string,
+    ) =>
+      request<{
+        workflowType: string;
+        tasks: Array<{ taskId: string; agentType: string; status: string }>;
+      }>(`/companies/${companyId}/workflows`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ workflowType, message, conversationId }),
+      }),
+
+    getTaskStatus: (companyId: string, token: string, taskId: string) =>
+      request<{ id: string; status: string; result?: unknown; errorMessage?: string } | null>(
+        `/companies/${companyId}/workflows/tasks/${taskId}`,
+        { token },
+      ),
+  },
 };
 
 export { ApiError };
