@@ -210,4 +210,66 @@ describe('CompanyService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  // ── getAiUsage ─────────────────────────────────────────────────────────────
+
+  describe('getAiUsage', () => {
+    it('throws ForbiddenException for non-member', async () => {
+      mockRepo.findMemberInCompany.mockResolvedValue(null);
+      await expect(service.getAiUsage(COMPANY_ID, REQUESTER_ID)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('returns zeroed totals when no executions exist', async () => {
+      mockRepo.findMemberInCompany.mockResolvedValue(makeUser() as never);
+      mockPrisma.agentExecution.findMany.mockResolvedValue([]);
+
+      const result = await service.getAiUsage(COMPANY_ID, REQUESTER_ID);
+
+      expect(result.totalExecutions).toBe(0);
+      expect(result.totalCostUsd).toBe(0);
+      expect(result.totalInputTokens).toBe(0);
+      expect(result.totalOutputTokens).toBe(0);
+      expect(result.byAgent).toEqual([]);
+      expect(result.fromDate).toBeDefined();
+      expect(result.toDate).toBeDefined();
+    });
+
+    it('aggregates executions correctly across agent types', async () => {
+      mockRepo.findMemberInCompany.mockResolvedValue(makeUser() as never);
+      mockPrisma.agentExecution.findMany.mockResolvedValue([
+        { agentType: 'DIRECTOR', inputTokens: 100, outputTokens: 50, estimatedCostUsd: 0.001, status: 'COMPLETED', createdAt: new Date() },
+        { agentType: 'DIRECTOR', inputTokens: 200, outputTokens: 80, estimatedCostUsd: 0.002, status: 'COMPLETED', createdAt: new Date() },
+        { agentType: 'CONTENT',  inputTokens: 500, outputTokens: 200, estimatedCostUsd: 0.005, status: 'COMPLETED', createdAt: new Date() },
+      ]);
+
+      const result = await service.getAiUsage(COMPANY_ID, REQUESTER_ID);
+
+      expect(result.totalExecutions).toBe(3);
+      expect(result.totalInputTokens).toBe(800);
+      expect(result.totalOutputTokens).toBe(330);
+      expect(Number(result.totalCostUsd.toFixed(3))).toBeCloseTo(0.008, 3);
+      expect(result.byAgent).toHaveLength(2);
+
+      const directorEntry = result.byAgent.find((a) => a.agentType === 'DIRECTOR');
+      expect(directorEntry?.executions).toBe(2);
+      expect(directorEntry?.totalTokens).toBe(430);
+
+      const contentEntry = result.byAgent.find((a) => a.agentType === 'CONTENT');
+      expect(contentEntry?.executions).toBe(1);
+      expect(contentEntry?.totalTokens).toBe(700);
+    });
+
+    it('respects custom date range', async () => {
+      mockRepo.findMemberInCompany.mockResolvedValue(makeUser() as never);
+      mockPrisma.agentExecution.findMany.mockResolvedValue([]);
+
+      const from = '2026-01-01';
+      const to = '2026-01-31';
+      await service.getAiUsage(COMPANY_ID, REQUESTER_ID, from, to);
+
+      const callArgs = mockPrisma.agentExecution.findMany.mock.calls[0][0];
+      expect(callArgs.where.createdAt.gte).toEqual(new Date(from));
+      expect(callArgs.where.createdAt.lte).toEqual(new Date(to));
+    });
+  });
 });
