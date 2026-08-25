@@ -125,6 +125,7 @@ model Company {
   companyKnowledge CompanyKnowledge[]
   agentMemory      AgentMemory[]
   agentTasks       AgentTask[]
+  generatedContent GeneratedContent[]
   agentExecutions  AgentExecution[]
   approvalRequests ApprovalRequest[]
   auditLogs        AuditLog[]
@@ -225,9 +226,10 @@ model Campaign {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  goal    MarketingGoal? @relation(fields: [goalId], references: [id])
-  tasks   Task[]
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  goal             MarketingGoal?    @relation(fields: [goalId], references: [id])
+  tasks            Task[]
+  generatedContent GeneratedContent[]
 
   @@index([companyId, status])
   @@index([goalId])
@@ -409,4 +411,25 @@ model AuditLog {
   @@index([companyId, createdAt])
   @@index([traceId])
   @@map("audit_logs")
+}
+
+model GeneratedContent {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId       String    @db.Uuid
+  agentType       AgentType
+  contentType     String
+  title           String?
+  content         String
+  metadata        Json?
+  campaignId      String?   @db.Uuid
+  agentExecutionId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, contentType])
+  @@index([companyId, agentType])
+  @@map("generated_content")
 }
