@@ -8,6 +8,7 @@ import { HealthModule } from './modules/health/health.module';
 import { AgentEngineModule } from './modules/agent-engine/agent-engine.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CompanyModule } from './modules/company/company.module';
+import { MarketingAgentModule } from './modules/marketing-director/marketing-agent.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { CompanyModule } from './modules/company/company.module';
     AgentEngineModule,
     AuthModule,
     CompanyModule,
+    MarketingAgentModule,
   ],
   providers: [
     {
