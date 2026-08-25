@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { IsString, IsIn, MinLength, MaxLength, IsOptional, IsUUID } from 'class-validator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../auth/auth.types';
@@ -16,9 +17,22 @@ import { AgentWorkflowService, WorkflowType } from './agent-workflow.service';
 import { AgentOrchestratorService } from '../../agent-engine/orchestration/agent-orchestrator.service';
 
 class TriggerWorkflowDto {
+  @IsString()
+  @IsIn(['full_campaign', 'content_sprint', 'research_then_strategy'])
   workflowType!: WorkflowType;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(10_000)
   message!: string;
+
+  @IsOptional()
+  @IsUUID()
   conversationId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'])
   model?: string;
 }
 

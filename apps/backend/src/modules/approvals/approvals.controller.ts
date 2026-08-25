@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApprovalStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -17,6 +18,9 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { ApprovalsService } from './approvals.service';
 
 class ResolveApprovalDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
   reviewNote?: string;
 }
 
