@@ -9,6 +9,7 @@ import { ResearchAgent } from './research/research.agent';
 import { SocialMediaAgent } from './social/social-media.agent';
 import { PerformanceAgent } from './performance/performance.agent';
 import { AnalyticsAgent } from './analytics/analytics.agent';
+import { CreativeAgent } from './creative/creative.agent';
 import { AgentDispatchProcessor } from './agent-dispatch.processor';
 import { AgentWorkflowService } from './workflow/agent-workflow.service';
 import { AgentWorkflowController } from './workflow/agent-workflow.controller';
@@ -25,12 +26,12 @@ import { DatabaseModule } from '../../database/database.module';
   controllers: [AgentWorkflowController],
   providers: [
     StrategyAgent, ContentAgent, ResearchAgent, SocialMediaAgent,
-    PerformanceAgent, AnalyticsAgent,
+    PerformanceAgent, AnalyticsAgent, CreativeAgent,
     MarketingRepository, AgentDispatchProcessor, AgentWorkflowService,
   ],
   exports: [
     StrategyAgent, ContentAgent, ResearchAgent, SocialMediaAgent,
-    PerformanceAgent, AnalyticsAgent,
+    PerformanceAgent, AnalyticsAgent, CreativeAgent,
     AgentWorkflowService,
   ],
 })

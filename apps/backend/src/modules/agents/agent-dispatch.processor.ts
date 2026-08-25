@@ -13,6 +13,7 @@ import { ResearchAgent } from './research/research.agent';
 import { SocialMediaAgent } from './social/social-media.agent';
 import { PerformanceAgent } from './performance/performance.agent';
 import { AnalyticsAgent } from './analytics/analytics.agent';
+import { CreativeAgent } from './creative/creative.agent';
 
 interface AgentTaskJobData {
   agentTaskId: string;
@@ -75,6 +76,10 @@ export class AgentDispatchProcessor extends WorkerHost {
         result = execResult.response;
       } else if (targetAgentType === AgentType.ANALYTICS) {
         const agent = await this.moduleRef.resolve(AnalyticsAgent, contextId, { strict: false });
+        const execResult = await agent.execute(context);
+        result = execResult.response;
+      } else if (targetAgentType === AgentType.CREATIVE) {
+        const agent = await this.moduleRef.resolve(CreativeAgent, contextId, { strict: false });
         const execResult = await agent.execute(context);
         result = execResult.response;
       } else {
