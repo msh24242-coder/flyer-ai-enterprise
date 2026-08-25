@@ -39,6 +39,7 @@ const mockConvRepo = {
 
 const mockAgent = {
   execute: jest.fn(),
+  executeStream: jest.fn(),
 } as unknown as jest.Mocked<MarketingDirectorAgent>;
 
 const mockMemory = {
@@ -99,6 +100,7 @@ describe('MarketingAgentService', () => {
     mockConvRepo.addMessage.mockResolvedValue({} as never);
     mockConvRepo.incrementCost.mockResolvedValue(undefined);
     mockAgent.execute.mockResolvedValue(defaultAgentResult);
+    mockAgent.executeStream.mockResolvedValue(defaultAgentResult);
   });
 
   // ── Authentication & Membership ────────────────────────────────────────────
@@ -283,6 +285,93 @@ describe('MarketingAgentService', () => {
       agentExecutionId: 'exec-1',
       estimatedCostUsd: 0.002,
       iterations: 1,
+    });
+  });
+
+  // ── runStream ─────────────────────────────────────────────────────────────
+
+  describe('runStream', () => {
+    it('throws ForbiddenException when user is not a member', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(null);
+      const onEvent = jest.fn();
+
+      await expect(
+        service.runStream({ companyId: COMPANY_A, userId: USER_A, message: 'Hello' }, onEvent),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockAgent.executeStream).not.toHaveBeenCalled();
+    });
+
+    it('creates a conversation and delegates to agent.executeStream', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.create.mockResolvedValue({ id: 'conv-stream-1' } as never);
+      const onEvent = jest.fn();
+
+      const result = await service.runStream(
+        { companyId: COMPANY_A, userId: USER_A, message: 'Stream me a plan' },
+        onEvent,
+      );
+
+      expect(mockAgent.executeStream).toHaveBeenCalledWith(
+        expect.objectContaining({ companyId: COMPANY_A, userMessage: 'Stream me a plan' }),
+        onEvent,
+      );
+      expect(result.conversationId).toBe('conv-stream-1');
+    });
+
+    it('passes onEvent callback to agent.executeStream', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.create.mockResolvedValue({ id: 'conv-stream-2' } as never);
+
+      const events: unknown[] = [];
+      const onEvent = (e: unknown) => events.push(e);
+
+      // Simulate the agent emitting events through the callback
+      mockAgent.executeStream.mockImplementation(async (_ctx, cb) => {
+        cb({ type: 'agent_start', agentType: 'DIRECTOR' });
+        cb({ type: 'token', delta: 'Hello' });
+        cb({ type: 'token', delta: ' world' });
+        return defaultAgentResult;
+      });
+
+      await service.runStream({ companyId: COMPANY_A, userId: USER_A, message: 'Stream' }, onEvent);
+
+      expect(events).toEqual([
+        { type: 'agent_start', agentType: 'DIRECTOR' },
+        { type: 'token', delta: 'Hello' },
+        { type: 'token', delta: ' world' },
+      ]);
+    });
+
+    it('persists user and assistant messages after streaming completes', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.create.mockResolvedValue({ id: 'conv-stream-3' } as never);
+
+      await service.runStream(
+        { companyId: COMPANY_A, userId: USER_A, message: 'Stream message' },
+        jest.fn(),
+      );
+
+      expect(mockConvRepo.addMessage).toHaveBeenCalledWith('conv-stream-3', 'user', 'Stream message');
+      expect(mockConvRepo.addMessage).toHaveBeenCalledWith(
+        'conv-stream-3',
+        'assistant',
+        'Here is my recommendation.',
+        120,
+      );
+    });
+
+    it('uses existing conversationId when provided', async () => {
+      mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+      mockConvRepo.findById.mockResolvedValue({ id: 'conv-existing' } as never);
+
+      await service.runStream(
+        { companyId: COMPANY_A, userId: USER_A, conversationId: 'conv-existing', message: 'Continue' },
+        jest.fn(),
+      );
+
+      expect(mockConvRepo.findById).toHaveBeenCalledWith(COMPANY_A, 'conv-existing');
+      expect(mockConvRepo.create).not.toHaveBeenCalled();
     });
   });
 });
