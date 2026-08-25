@@ -8,6 +8,8 @@ const COMPANY_B = 'company-bbb';
 const USER_IN_A = 'user-in-a';
 const USER_IN_B = 'user-in-b';
 
+const mockPrisma = { agentExecution: { findMany: jest.fn() } };
+
 const mockRepo: jest.Mocked<CompanyRepository> = {
   findById: jest.fn(),
   update: jest.fn(),
@@ -27,7 +29,7 @@ describe('Tenant Isolation', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new CompanyService(mockRepo);
+    service = new CompanyService(mockRepo, mockPrisma as never);
   });
 
   it('user from company A cannot read company B profile', async () => {

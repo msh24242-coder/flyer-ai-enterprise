@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Put,
 } from '@nestjs/common';
 import { Company, CompanyKnowledge } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -108,5 +109,36 @@ export class CompanyController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<void> {
     return this.companyService.deleteKnowledge(companyId, knowledgeId, user.id);
+  }
+
+  // ─── AI Configuration ─────────────────────────────────────────────────────
+
+  @Get('ai/config')
+  async getAiConfig(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.companyService.getAiConfig(companyId, user.id);
+  }
+
+  @Put('ai/config')
+  async updateAiConfig(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @Body() config: Record<string, unknown>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.companyService.updateAiConfig(companyId, config, user.id);
+  }
+
+  // ─── AI Usage ─────────────────────────────────────────────────────────────
+
+  @Get('ai/usage')
+  async getAiUsage(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.companyService.getAiUsage(companyId, user.id, from, to);
   }
 }

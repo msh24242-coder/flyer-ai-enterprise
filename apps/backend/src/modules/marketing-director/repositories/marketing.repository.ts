@@ -200,4 +200,47 @@ export class MarketingRepository {
       },
     });
   }
+
+  // ─── Goal mutations ────────────────────────────────────────────────────────
+
+  async updateGoal(
+    companyId: string,
+    goalId: string,
+    data: Partial<{ title: string; description: string; status: GoalStatus; targetDate: string; metrics: Record<string, unknown> }>,
+  ): Promise<MarketingGoal | null> {
+    const goals = await this.listGoals(companyId);
+    if (!goals.find((g) => g.id === goalId)) return null;
+
+    return this.prisma.marketingGoal.update({
+      where: { id: goalId },
+      data: {
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.targetDate !== undefined ? { targetDate: new Date(data.targetDate) } : {}),
+        ...(data.metrics !== undefined ? { metrics: data.metrics as Prisma.InputJsonValue } : {}),
+      },
+    });
+  }
+
+  async deleteGoal(companyId: string, goalId: string): Promise<boolean> {
+    const goals = await this.listGoals(companyId);
+    if (!goals.find((g) => g.id === goalId)) return false;
+    await this.prisma.marketingGoal.delete({ where: { id: goalId } });
+    return true;
+  }
+
+  async deleteCampaign(companyId: string, campaignId: string): Promise<boolean> {
+    const existing = await this.findCampaign(companyId, campaignId);
+    if (!existing) return false;
+    await this.prisma.campaign.delete({ where: { id: campaignId } });
+    return true;
+  }
+
+  async deleteTask(companyId: string, taskId: string): Promise<boolean> {
+    const existing = await this.findTask(companyId, taskId);
+    if (!existing) return false;
+    await this.prisma.task.delete({ where: { id: taskId } });
+    return true;
+  }
 }

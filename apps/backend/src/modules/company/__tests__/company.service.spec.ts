@@ -19,6 +19,8 @@ const makeUser = (overrides: Partial<{ id: string; role: UserRole; isActive: boo
   ...overrides,
 });
 
+const mockPrisma = { agentExecution: { findMany: jest.fn() } };
+
 const mockRepo: jest.Mocked<CompanyRepository> = {
   findById: jest.fn(),
   update: jest.fn(),
@@ -41,7 +43,7 @@ describe('CompanyService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new CompanyService(mockRepo);
+    service = new CompanyService(mockRepo, mockPrisma as never);
   });
 
   // ── getCompany ─────────────────────────────────────────────────────────────

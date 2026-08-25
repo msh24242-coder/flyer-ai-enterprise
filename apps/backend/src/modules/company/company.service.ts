@@ -10,6 +10,7 @@ import { CompanyRepository, SafeMember } from './company.repository';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { CreateKnowledgeDto, UpdateKnowledgeDto } from './dto/company-knowledge.dto';
+import { PrismaService } from '../../database/prisma.service';
 
 const ADMIN_ROLES: UserRole[] = [UserRole.OWNER, UserRole.ADMIN];
 const OWNER_ROLES: UserRole[] = [UserRole.OWNER];
@@ -18,7 +19,10 @@ const OWNER_ROLES: UserRole[] = [UserRole.OWNER];
 export class CompanyService {
   private readonly logger = new Logger(CompanyService.name);
 
-  constructor(private readonly companyRepo: CompanyRepository) {}
+  constructor(
+    private readonly companyRepo: CompanyRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async getCompany(companyId: string, requesterId: string): Promise<Company> {
     await this.assertMembership(companyId, requesterId);
@@ -202,6 +206,85 @@ export class CompanyService {
       'company_knowledge',
       knowledgeId,
     );
+  }
+
+  // ─── AI Configuration ─────────────────────────────────────────────────────
+
+  async getAiConfig(companyId: string, requesterId: string): Promise<Record<string, unknown>> {
+    await this.assertRole(companyId, requesterId, ADMIN_ROLES);
+    const company = await this.companyRepo.findById(companyId);
+    if (!company) throw new NotFoundException('Company not found');
+    return (company.aiConfig as Record<string, unknown>) ?? {};
+  }
+
+  async updateAiConfig(
+    companyId: string,
+    config: Record<string, unknown>,
+    requesterId: string,
+  ): Promise<Record<string, unknown>> {
+    await this.assertRole(companyId, requesterId, ADMIN_ROLES);
+    const allowedKeys = ['defaultModel', 'monthlyBudgetUsd', 'maxExecutionCostUsd', 'approvalRequired'];
+    const sanitized = Object.fromEntries(
+      Object.entries(config).filter(([k]) => allowedKeys.includes(k)),
+    );
+    await this.companyRepo.update(companyId, { aiConfig: sanitized as never });
+    await this.companyRepo.logAudit(companyId, requesterId, 'AI_CONFIG_UPDATED', 'company', companyId);
+    return sanitized;
+  }
+
+  // ─── AI Usage Aggregation ─────────────────────────────────────────────────
+
+  async getAiUsage(
+    companyId: string,
+    requesterId: string,
+    fromDate?: string,
+    toDate?: string,
+  ) {
+    await this.assertMembership(companyId, requesterId);
+
+    const from = fromDate ? new Date(fromDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const to = toDate ? new Date(toDate) : new Date();
+
+    const executions = await this.prisma.agentExecution.findMany({
+      where: {
+        companyId,
+        createdAt: { gte: from, lte: to },
+      },
+      select: {
+        agentType: true,
+        inputTokens: true,
+        outputTokens: true,
+        estimatedCostUsd: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    const totalInputTokens = executions.reduce((s, e) => s + (e.inputTokens ?? 0), 0);
+    const totalOutputTokens = executions.reduce((s, e) => s + (e.outputTokens ?? 0), 0);
+    const totalCostUsd = executions.reduce((s, e) => s + Number(e.estimatedCostUsd ?? 0), 0);
+
+    const byAgent: Record<string, { executions: number; inputTokens: number; outputTokens: number; costUsd: number }> = {};
+    for (const e of executions) {
+      const key = e.agentType;
+      if (!byAgent[key]) byAgent[key] = { executions: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+      byAgent[key].executions++;
+      byAgent[key].inputTokens += e.inputTokens ?? 0;
+      byAgent[key].outputTokens += e.outputTokens ?? 0;
+      byAgent[key].costUsd += Number(e.estimatedCostUsd ?? 0);
+    }
+
+    return {
+      period: { from: from.toISOString(), to: to.toISOString() },
+      totals: {
+        executions: executions.length,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        totalTokens: totalInputTokens + totalOutputTokens,
+        estimatedCostUsd: totalCostUsd.toFixed(4),
+      },
+      byAgent,
+    };
   }
 
   // ─── Tenant isolation helpers ─────────────────────────────────────────────
