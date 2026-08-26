@@ -5,6 +5,7 @@ const mockPrisma = {
   agentTask: {
     create: jest.fn(),
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     update: jest.fn(),
   },
 };
@@ -79,22 +80,22 @@ describe('AgentOrchestratorService', () => {
   });
 
   describe('getTaskStatus', () => {
-    it('returns task when found', async () => {
-      mockPrisma.agentTask.findUnique.mockResolvedValue({ id: 'task-1', status: AgentTaskStatus.COMPLETED });
+    it('returns task when found for the given company', async () => {
+      mockPrisma.agentTask.findFirst.mockResolvedValue({ id: 'task-1', status: AgentTaskStatus.COMPLETED });
 
-      const result = await makeService().getTaskStatus('task-1');
+      const result = await makeService().getTaskStatus('co-1', 'task-1');
 
       expect(result).toEqual({ id: 'task-1', status: AgentTaskStatus.COMPLETED });
-      expect(mockPrisma.agentTask.findUnique).toHaveBeenCalledWith({
-        where: { id: 'task-1' },
+      expect(mockPrisma.agentTask.findFirst).toHaveBeenCalledWith({
+        where: { id: 'task-1', companyId: 'co-1' },
         select: { id: true, status: true },
       });
     });
 
     it('returns null when task not found', async () => {
-      mockPrisma.agentTask.findUnique.mockResolvedValue(null);
+      mockPrisma.agentTask.findFirst.mockResolvedValue(null);
 
-      const result = await makeService().getTaskStatus('missing');
+      const result = await makeService().getTaskStatus('co-1', 'missing');
 
       expect(result).toBeNull();
     });

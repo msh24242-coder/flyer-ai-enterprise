@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { AgentEngineModule } from '../agent-engine/agent-engine.module';
 import { MarketingAgentModule } from '../marketing-director/marketing-agent.module';
+import { CompanyModule } from '../company/company.module';
 import { QUEUE_AGENT_TASKS } from '../agent-engine/agent-engine.constants';
 import { StrategyAgent } from './strategy/strategy.agent';
 import { ContentAgent } from './content/content.agent';
@@ -20,6 +21,7 @@ import { DatabaseModule } from '../../database/database.module';
   imports: [
     AgentEngineModule,
     MarketingAgentModule,
+    CompanyModule,
     DatabaseModule,
     BullModule.registerQueue({ name: QUEUE_AGENT_TASKS }),
   ],

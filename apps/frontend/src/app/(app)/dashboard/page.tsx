@@ -8,7 +8,6 @@ import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/stat-card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Target, Megaphone, CheckSquare, BrainCircuit, ArrowRight, TrendingUp } from 'lucide-react';
 import type { BadgeVariant } from '@/components/ui/badge';
 

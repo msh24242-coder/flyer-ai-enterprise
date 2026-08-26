@@ -1,6 +1,7 @@
 import { AgentWorkflowController } from '../agent-workflow.controller';
 import { AgentWorkflowService } from '../agent-workflow.service';
 import { AgentOrchestratorService } from '../../../agent-engine/orchestration/agent-orchestrator.service';
+import { CompanyService } from '../../../company/company.service';
 import { AgentType, AgentTaskStatus } from '@prisma/client';
 
 const COMPANY_ID = 'company-abc';
@@ -16,12 +17,17 @@ const mockOrchestrator = {
   getTaskStatus: jest.fn(),
 } as unknown as jest.Mocked<AgentOrchestratorService>;
 
+const mockCompanyService = {
+  getCompany: jest.fn(),
+} as unknown as jest.Mocked<CompanyService>;
+
 describe('AgentWorkflowController', () => {
   let controller: AgentWorkflowController;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new AgentWorkflowController(mockWorkflowService, mockOrchestrator);
+    mockCompanyService.getCompany.mockResolvedValue({ id: COMPANY_ID } as never);
+    controller = new AgentWorkflowController(mockWorkflowService, mockOrchestrator, mockCompanyService);
   });
 
   // ─── triggerWorkflow ──────────────────────────────────────────────────────
@@ -108,16 +114,17 @@ describe('AgentWorkflowController', () => {
       const taskRecord = { id: 'task-1', status: AgentTaskStatus.RUNNING };
       mockOrchestrator.getTaskStatus.mockResolvedValue(taskRecord as never);
 
-      const result = await controller.getTaskStatus(COMPANY_ID, 'task-1');
+      const result = await controller.getTaskStatus(COMPANY_ID, 'task-1', USER as never);
 
       expect(result).toEqual(taskRecord);
-      expect(mockOrchestrator.getTaskStatus).toHaveBeenCalledWith('task-1');
+      expect(mockCompanyService.getCompany).toHaveBeenCalledWith(COMPANY_ID, USER.id);
+      expect(mockOrchestrator.getTaskStatus).toHaveBeenCalledWith(COMPANY_ID, 'task-1');
     });
 
     it('returns null when task does not exist', async () => {
       mockOrchestrator.getTaskStatus.mockResolvedValue(null);
 
-      const result = await controller.getTaskStatus(COMPANY_ID, 'no-such-task');
+      const result = await controller.getTaskStatus(COMPANY_ID, 'no-such-task', USER as never);
 
       expect(result).toBeNull();
     });

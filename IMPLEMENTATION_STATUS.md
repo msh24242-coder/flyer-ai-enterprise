@@ -1,7 +1,7 @@
 # Implementation Status — SH Marketing
 
-**Last updated:** 2026-08-25  
-**Current state:** All phases complete — 446 tests passing
+**Last updated:** 2026-08-26  
+**Current state:** All phases complete — 447 tests passing. See [Production Audit — 2026-08-26](#production-audit--2026-08-26) for bugs found and fixed since the previous update.
 
 ---
 
@@ -9,7 +9,7 @@
 
 | Check | Status |
 |-------|--------|
-| Backend tests | ✅ 446/446 passing (36 suites) |
+| Backend tests | ✅ 447/447 passing (36 suites) |
 | Backend TypeScript | ✅ Clean |
 | Backend ESLint | ✅ Clean |
 | Backend build | ✅ `nest build` success |
@@ -175,3 +175,23 @@
 | Audit | audit.service.spec | 6 |
 | Content | content.repository.spec | 8 |
 | Content | content.controller.spec | 7 |
+
+---
+
+## Production Audit — 2026-08-26
+
+A full production audit of the live VPS deployment found and fixed several bugs that the checklists above didn't catch (unit tests mocked past them). Fixed and deployed to `sh-marketing-backend`:
+
+- **Critical — login/register were completely broken in production.** `AuthService` requires `REFRESH_TOKEN_SECRET` (`getOrThrow`), but `docker-compose.prod.yml` only ever supplied `JWT_REFRESH_SECRET` — a name the code never reads. Every register/login call threw a 500. Fixed the compose env mapping; confirmed live via register→login round-trip.
+- **Critical — 4 cross-tenant authorization holes.** `ContentController`, `ApprovalsController`, and `AgentWorkflowController` (`triggerWorkflow` and `getTaskStatus`) never verified the authenticated user belongs to the `:companyId` in the URL — any authenticated user of any company could read/write another company's content, approve/deny another company's approvals, trigger workflows (real LLM spend) as another company, and poll another company's task status by ID. Added the same `assertMembership` pattern already used in `MarketingController`. Verified live with two throwaway companies: cross-tenant requests now return 403, same-tenant requests still return 200.
+- **pgvector memory system was non-functional.** `MemoryService.searchSemanticMemory` and `MemoryWriteProcessor` used snake_case raw-SQL column names (`company_id`, `memory_type`, `created_at`) and referenced `conversation_id`/`agent_execution_id` columns that don't exist on `agent_memory`. The actual table uses quoted camelCase columns and has no conversation/execution columns. Every read and write would throw `column does not exist`. Fixed and validated against the live schema via `EXPLAIN` (both statements now plan cleanly).
+- **Production secrets were dev placeholders.** `.env` had `JWT_SECRET`/`JWT_REFRESH_SECRET` (now `REFRESH_TOKEN_SECRET`) literally set to `dev-jwt-secret-change-before-production` / `dev-refresh-secret-change-before-production`, plus several duplicate keys from a copy-paste (`NEXT_PUBLIC_API_URL`, `ANTHROPIC_API_KEY`, `JWT_SECRET`). Rotated both JWT secrets to random 128-char values and deduplicated the file.
+- **Content DTO had no runtime validation.** `CreateGeneratedContentDto` was a plain TypeScript `interface` (no metadata for Nest's `ValidationPipe`) despite being used as `@Body()`. Converted to a `class` with `class-validator` decorators.
+- Frontend: added a missing `eslint.config.mjs` (`next lint` had no config at all and would hang on an interactive prompt in CI/non-interactive contexts), fixed 2 real lint errors (empty-interface types), removed a dead import, and fixed the `next.config.ts` `typedRoutes` deprecation warning.
+
+**Known gaps, not fixed this pass** (flagged for follow-up, not touched because they need either a live browser to verify or new shared plumbing):
+- Frontend `/chat` does not consume the backend's SSE stream — it does a plain fetch/await-JSON call, so responses appear all-at-once rather than token-by-token, even though the backend genuinely streams.
+- Frontend has no 401 handling or token-refresh call — an expired access token surfaces as a generic error instead of a silent refresh-and-retry or redirect to `/login`.
+- `renameConversation`/`archiveConversation` exist in the frontend API client but have no UI wired up in `/chat`.
+- Workflow-dispatched agent executions (`AgentDispatchProcessor`) bypass the monthly AI budget check that the Director chat path (`MarketingAgentService.run`) enforces — repeatedly triggering `full_campaign`/`content_sprint`/`research_then_strategy` has no spend cap.
+- `sh-marketing-frontend`'s container was stuck in `Created` (never started) because host port 3000 is already bound by `q-syria-platform`'s frontend (`127.0.0.1:3000`, routed via the shared Traefik instance). Not resolved — needs a domain + Traefik hostname-routing decision, out of scope for this pass per the standing instruction not to touch shared Traefik config without explicit sign-off.

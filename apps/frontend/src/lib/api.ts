@@ -46,7 +46,7 @@ export interface LoginResponse {
   user: { id: string; email: string; firstName: string; lastName: string; companyId: string };
 }
 
-export interface RegisterResponse extends LoginResponse {}
+export type RegisterResponse = LoginResponse;
 
 export const api = {
   auth: {

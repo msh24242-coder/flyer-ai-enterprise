@@ -1,14 +1,44 @@
 import { Injectable } from '@nestjs/common';
 import { AgentType, Prisma } from '@prisma/client';
+import {
+  IsEnum,
+  IsString,
+  IsOptional,
+  IsObject,
+  IsUUID,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 import { PrismaService } from '../../database/prisma.service';
 
-export interface CreateGeneratedContentDto {
-  agentType: AgentType;
-  contentType: string;
+export class CreateGeneratedContentDto {
+  @IsEnum(AgentType)
+  agentType!: AgentType;
+
+  @IsString()
+  @MaxLength(100)
+  contentType!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
   title?: string;
-  content: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50_000)
+  content!: string;
+
+  @IsOptional()
+  @IsObject()
   metadata?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsUUID()
   campaignId?: string;
+
+  @IsOptional()
+  @IsUUID()
   agentExecutionId?: string;
 }
 

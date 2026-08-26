@@ -60,9 +60,9 @@ export class AgentOrchestratorService {
     return { id: record.id, status: record.status };
   }
 
-  async getTaskStatus(taskId: string): Promise<AgentTaskRecord | null> {
-    const task = await this.prisma.agentTask.findUnique({
-      where: { id: taskId },
+  async getTaskStatus(companyId: string, taskId: string): Promise<AgentTaskRecord | null> {
+    const task = await this.prisma.agentTask.findFirst({
+      where: { id: taskId, companyId },
       select: { id: true, status: true },
     });
     return task;

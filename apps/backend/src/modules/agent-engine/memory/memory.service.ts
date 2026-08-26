@@ -53,14 +53,14 @@ export class MemoryService {
       SELECT
         id,
         content,
-        memory_type,
+        "memoryType" AS memory_type,
         metadata,
-        created_at,
+        "createdAt" AS created_at,
         1 - (embedding <=> ${embeddingStr}::vector) AS similarity
       FROM agent_memory
       WHERE
-        company_id = ${params.companyId}
-        AND memory_type = ANY(${memoryTypeFilter}::text[])
+        "companyId" = ${params.companyId}::uuid
+        AND "memoryType"::text = ANY(${memoryTypeFilter}::text[])
         AND embedding IS NOT NULL
         AND 1 - (embedding <=> ${embeddingStr}::vector) >= ${threshold}
       ORDER BY embedding <=> ${embeddingStr}::vector

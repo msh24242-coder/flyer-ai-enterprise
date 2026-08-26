@@ -18,8 +18,7 @@ export class MemoryWriteProcessor extends WorkerHost {
   }
 
   async process(job: Job<MemoryWriteJob>): Promise<void> {
-    const { companyId, agentType, memoryType, content, metadata, conversationId, agentExecutionId } =
-      job.data;
+    const { companyId, agentType, memoryType, content, metadata } = job.data;
 
     const embeddingResponse = await this.embeddingProvider.embed({ texts: [content] });
     const embedding = embeddingResponse.embeddings[0];
@@ -27,17 +26,15 @@ export class MemoryWriteProcessor extends WorkerHost {
 
     await this.prisma.$executeRaw`
       INSERT INTO agent_memory (
-        id, company_id, agent_type, memory_type, content, metadata,
-        conversation_id, agent_execution_id, embedding, created_at, updated_at
+        id, "companyId", "agentType", "memoryType", content, metadata,
+        embedding, "createdAt", "updatedAt"
       ) VALUES (
         gen_random_uuid(),
-        ${companyId},
+        ${companyId}::uuid,
         ${agentType}::"AgentType",
         ${memoryType}::"MemoryType",
         ${content},
         ${JSON.stringify(metadata ?? {})}::jsonb,
-        ${conversationId ?? null},
-        ${agentExecutionId ?? null},
         ${embeddingStr}::vector,
         NOW(),
         NOW()

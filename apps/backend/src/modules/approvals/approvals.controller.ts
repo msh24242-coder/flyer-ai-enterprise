@@ -15,6 +15,7 @@ import { ApprovalStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { CompanyService } from '../company/company.service';
 import { ApprovalsService } from './approvals.service';
 
 class ResolveApprovalDto {
@@ -27,7 +28,10 @@ class ResolveApprovalDto {
 @UseGuards(JwtAuthGuard)
 @Controller('companies/:companyId/approvals')
 export class ApprovalsController {
-  constructor(private readonly approvalsService: ApprovalsService) {}
+  constructor(
+    private readonly approvalsService: ApprovalsService,
+    private readonly companyService: CompanyService,
+  ) {}
 
   /**
    * GET /companies/:companyId/approvals
@@ -36,8 +40,10 @@ export class ApprovalsController {
   @Get()
   async list(
     @Param('companyId', ParseUUIDPipe) companyId: string,
+    @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: string,
   ) {
+    await this.assertMembership(companyId, user.id);
     const approvalStatus =
       status && Object.values(ApprovalStatus).includes(status as ApprovalStatus)
         ? (status as ApprovalStatus)
@@ -53,7 +59,9 @@ export class ApprovalsController {
   async getOne(
     @Param('companyId', ParseUUIDPipe) companyId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.assertMembership(companyId, user.id);
     return this.approvalsService.getApproval(companyId, id);
   }
 
@@ -69,6 +77,7 @@ export class ApprovalsController {
     @Body() dto: ResolveApprovalDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.assertMembership(companyId, user.id);
     return this.approvalsService.approve(companyId, id, user.id, dto.reviewNote);
   }
 
@@ -84,6 +93,11 @@ export class ApprovalsController {
     @Body() dto: ResolveApprovalDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    await this.assertMembership(companyId, user.id);
     return this.approvalsService.deny(companyId, id, user.id, dto.reviewNote);
+  }
+
+  private async assertMembership(companyId: string, userId: string): Promise<void> {
+    await this.companyService.getCompany(companyId, userId);
   }
 }

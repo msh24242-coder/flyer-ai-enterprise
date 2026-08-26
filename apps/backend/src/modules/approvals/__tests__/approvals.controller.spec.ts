@@ -1,5 +1,6 @@
 import { ApprovalsController } from '../approvals.controller';
 import { ApprovalsService } from '../approvals.service';
+import { CompanyService } from '../../company/company.service';
 import { ApprovalStatus } from '@prisma/client';
 
 const COMPANY_ID = 'company-abc';
@@ -12,12 +13,17 @@ const mockApprovalsService = {
   deny: jest.fn(),
 } as unknown as jest.Mocked<ApprovalsService>;
 
+const mockCompanyService = {
+  getCompany: jest.fn(),
+} as unknown as jest.Mocked<CompanyService>;
+
 describe('ApprovalsController', () => {
   let controller: ApprovalsController;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new ApprovalsController(mockApprovalsService);
+    mockCompanyService.getCompany.mockResolvedValue({ id: COMPANY_ID } as never);
+    controller = new ApprovalsController(mockApprovalsService, mockCompanyService);
   });
 
   describe('list', () => {
@@ -25,15 +31,16 @@ describe('ApprovalsController', () => {
       const approvals = [{ id: 'a1', status: ApprovalStatus.PENDING }];
       mockApprovalsService.listApprovals.mockResolvedValue(approvals as never);
 
-      const result = await controller.list(COMPANY_ID, undefined);
+      const result = await controller.list(COMPANY_ID, USER as never, undefined);
       expect(result).toEqual(approvals);
+      expect(mockCompanyService.getCompany).toHaveBeenCalledWith(COMPANY_ID, USER.id);
       expect(mockApprovalsService.listApprovals).toHaveBeenCalledWith(COMPANY_ID, undefined);
     });
 
     it('passes PENDING status filter to service', async () => {
       mockApprovalsService.listApprovals.mockResolvedValue([]);
 
-      await controller.list(COMPANY_ID, 'PENDING');
+      await controller.list(COMPANY_ID, USER as never, 'PENDING');
       expect(mockApprovalsService.listApprovals).toHaveBeenCalledWith(
         COMPANY_ID,
         ApprovalStatus.PENDING,
@@ -43,7 +50,7 @@ describe('ApprovalsController', () => {
     it('ignores unknown status values', async () => {
       mockApprovalsService.listApprovals.mockResolvedValue([]);
 
-      await controller.list(COMPANY_ID, 'NOT_REAL');
+      await controller.list(COMPANY_ID, USER as never, 'NOT_REAL');
       expect(mockApprovalsService.listApprovals).toHaveBeenCalledWith(COMPANY_ID, undefined);
     });
   });
@@ -53,7 +60,7 @@ describe('ApprovalsController', () => {
       const approval = { id: 'a1', status: ApprovalStatus.PENDING };
       mockApprovalsService.getApproval.mockResolvedValue(approval as never);
 
-      const result = await controller.getOne(COMPANY_ID, 'a1');
+      const result = await controller.getOne(COMPANY_ID, 'a1', USER as never);
       expect(result).toEqual(approval);
       expect(mockApprovalsService.getApproval).toHaveBeenCalledWith(COMPANY_ID, 'a1');
     });

@@ -13,6 +13,7 @@ import { IsString, IsIn, MinLength, MaxLength, IsOptional, IsUUID } from 'class-
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../auth/auth.types';
+import { CompanyService } from '../../company/company.service';
 import { AgentWorkflowService, WorkflowType } from './agent-workflow.service';
 import { AgentOrchestratorService } from '../../agent-engine/orchestration/agent-orchestrator.service';
 
@@ -42,6 +43,7 @@ export class AgentWorkflowController {
   constructor(
     private readonly workflowService: AgentWorkflowService,
     private readonly orchestrator: AgentOrchestratorService,
+    private readonly companyService: CompanyService,
   ) {}
 
   @Post()
@@ -51,6 +53,7 @@ export class AgentWorkflowController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: TriggerWorkflowDto,
   ) {
+    await this.assertMembership(companyId, user.id);
     const input = {
       companyId,
       requestedByUserId: user.id,
@@ -73,9 +76,15 @@ export class AgentWorkflowController {
 
   @Get('tasks/:taskId')
   async getTaskStatus(
-    @Param('companyId', ParseUUIDPipe) _companyId: string,
+    @Param('companyId', ParseUUIDPipe) companyId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.orchestrator.getTaskStatus(taskId);
+    await this.assertMembership(companyId, user.id);
+    return this.orchestrator.getTaskStatus(companyId, taskId);
+  }
+
+  private async assertMembership(companyId: string, userId: string): Promise<void> {
+    await this.companyService.getCompany(companyId, userId);
   }
 }
