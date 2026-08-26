@@ -234,7 +234,7 @@ export abstract class AgentEngine {
   ): Promise<AgentExecutionResult> {
     const identity = this.getIdentity();
     const model = context.model ?? this.config.get<string>('AI_MODEL', 'claude-opus-5');
-    onEvent({ type: 'agent_start', agentType: identity.agentType });
+    onEvent({ type: 'agent_start', agentType: identity.agentType, conversationId: context.conversationId });
 
     const traceCtx = this.tracer.createTrace({
       agentType: identity.agentType,

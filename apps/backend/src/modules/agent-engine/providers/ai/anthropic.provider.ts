@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   IAIProvider,
@@ -18,11 +18,23 @@ export class AnthropicProvider implements IAIProvider {
   private readonly client: Anthropic;
   private readonly logger = new Logger(AnthropicProvider.name);
 
-  constructor(apiKey: string) {
+  constructor(private readonly apiKey: string) {
     this.client = new Anthropic({ apiKey });
   }
 
+  /**
+   * The SDK accepts an empty key without complaining (it only fails once a real
+   * request hits Anthropic's API), which would otherwise surface as an opaque
+   * upstream 401 deep inside a tool-use loop. Fail fast with a clear message instead.
+   */
+  private assertConfigured(): void {
+    if (!this.apiKey) {
+      throw new ServiceUnavailableException('AI provider is not configured for this environment.');
+    }
+  }
+
   async complete(request: AIProviderRequest): Promise<AIProviderResponse> {
+    this.assertConfigured();
     const params = this.buildParams(request);
     const response = await this.client.messages.create({
       ...params,
@@ -35,6 +47,7 @@ export class AnthropicProvider implements IAIProvider {
     request: AIProviderRequest,
     onEvent: (event: AIStreamEvent) => void,
   ): Promise<AIProviderResponse> {
+    this.assertConfigured();
     const params = this.buildParams(request);
     const stream = await this.client.messages.stream({ ...params });
 

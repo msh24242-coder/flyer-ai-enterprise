@@ -1,4 +1,5 @@
 import { AgentDispatchProcessor } from '../agent-dispatch.processor';
+import { BudgetGuardService } from '../../agent-engine/budget/budget-guard.service';
 import { AgentType } from '@prisma/client';
 
 const makeJob = (overrides: Record<string, unknown> = {}) => ({
@@ -25,16 +26,22 @@ const mockOrchestrator = {
 
 const mockPrisma = {};
 
+const mockBudgetGuard = {
+  assertWithinBudget: jest.fn(),
+} as unknown as jest.Mocked<BudgetGuardService>;
+
 describe('AgentDispatchProcessor', () => {
   let processor: AgentDispatchProcessor;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockAgent.execute.mockResolvedValue({ response: 'agent output' });
+    mockBudgetGuard.assertWithinBudget.mockResolvedValue(undefined);
     processor = new AgentDispatchProcessor(
       mockModuleRef as never,
       mockPrisma as never,
       mockOrchestrator as never,
+      mockBudgetGuard,
     );
   });
 
@@ -120,6 +127,16 @@ describe('AgentDispatchProcessor', () => {
 
       expect(mockOrchestrator.markTaskFailed).toHaveBeenCalledWith('task-123', 'Agent exploded');
       expect(mockOrchestrator.markTaskCompleted).not.toHaveBeenCalled();
+    });
+
+    it('marks task failed and never dispatches the agent when the monthly budget is exceeded', async () => {
+      mockBudgetGuard.assertWithinBudget.mockRejectedValueOnce(new Error('Monthly AI budget exceeded'));
+      const job = makeJob({ targetAgentType: AgentType.STRATEGY });
+
+      await expect(processor.process(job as never)).rejects.toThrow('Monthly AI budget exceeded');
+
+      expect(mockAgent.execute).not.toHaveBeenCalled();
+      expect(mockOrchestrator.markTaskFailed).toHaveBeenCalledWith('task-123', 'Monthly AI budget exceeded');
     });
 
     it('uses payload as userMessage fallback when userMessage missing', async () => {

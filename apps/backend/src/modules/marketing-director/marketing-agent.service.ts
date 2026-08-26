@@ -2,7 +2,6 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
-  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -14,6 +13,7 @@ import { MarketingDirectorAgent } from './marketing-director.agent';
 import { AgentExecutionResult, AgentStreamEventType } from '../agent-engine/base/agent-engine.types';
 import { CONVERSATION_HISTORY_LIMIT } from '../agent-engine/agent-engine.constants';
 import { MemoryService } from '../agent-engine/memory/memory.service';
+import { BudgetGuardService } from '../agent-engine/budget/budget-guard.service';
 import { AuditService } from '../audit/audit.service';
 
 export interface RunAgentInput {
@@ -47,6 +47,7 @@ export class MarketingAgentService {
     private readonly config: ConfigService,
     private readonly auditService: AuditService,
     private readonly prisma: PrismaService,
+    private readonly budgetGuard: BudgetGuardService,
   ) {}
 
   async run(input: RunAgentInput): Promise<RunAgentOutput> {
@@ -85,7 +86,7 @@ export class MarketingAgentService {
     const knowledge = await this.memoryService.getCompanyKnowledge(input.companyId);
 
     // 5. Enforce budget limits if configured
-    await this.enforceBudget(input.companyId, company);
+    await this.budgetGuard.assertWithinBudget(input.companyId);
 
     // 6. Persist user message
     await this.conversationRepo.addMessage(conversationId, 'user', input.message);
@@ -171,6 +172,8 @@ export class MarketingAgentService {
     const company = await this.companyRepo.findById(input.companyId);
     const knowledge = await this.memoryService.getCompanyKnowledge(input.companyId);
 
+    await this.budgetGuard.assertWithinBudget(input.companyId);
+
     await this.conversationRepo.addMessage(conversationId, 'user', input.message);
 
     const model = input.model ?? this.config.get<string>('AI_MODEL', 'claude-opus-5');
@@ -237,24 +240,6 @@ export class MarketingAgentService {
     void this.auditService.log({ companyId, userId, action: 'CONVERSATION_DELETED', resource: 'conversation', resourceId: conversationId });
   }
 
-  private async enforceBudget(companyId: string, company: { aiConfig?: unknown } | null): Promise<void> {
-    const aiConfig = (company?.aiConfig ?? {}) as Record<string, unknown>;
-    const monthlyBudgetUsd = typeof aiConfig.monthlyBudgetUsd === 'number' ? aiConfig.monthlyBudgetUsd : null;
-    if (!monthlyBudgetUsd) return;
-
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const result = await this.prisma.agentExecution.aggregate({
-      where: { companyId, createdAt: { gte: thirtyDaysAgo } },
-      _sum: { estimatedCostUsd: true },
-    });
-    const spent = Number(result._sum.estimatedCostUsd ?? 0);
-
-    if (spent >= monthlyBudgetUsd) {
-      throw new BadRequestException(
-        `Monthly AI budget of $${monthlyBudgetUsd} has been reached ($${spent.toFixed(4)} spent). Update your budget in Settings to continue.`,
-      );
-    }
-  }
 
   private async verifyConversationOwnership(companyId: string, conversationId: string, userId: string): Promise<void> {
     const member = await this.companyRepo.findMemberInCompany(companyId, userId);

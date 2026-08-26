@@ -10,6 +10,7 @@ import { ApprovalEngineService } from './approval/approval-engine.service';
 import { MemoryService } from './memory/memory.service';
 import { MemoryWriteProcessor } from './memory/memory-write.processor';
 import { AgentOrchestratorService } from './orchestration/agent-orchestrator.service';
+import { BudgetGuardService } from './budget/budget-guard.service';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AgentOrchestratorService } from './orchestration/agent-orchestrator.ser
     MemoryService,
     MemoryWriteProcessor,
     AgentOrchestratorService,
+    BudgetGuardService,
   ],
   exports: [
     AI_PROVIDER,
@@ -44,6 +46,7 @@ import { AgentOrchestratorService } from './orchestration/agent-orchestrator.ser
     ApprovalEngineService,
     MemoryService,
     AgentOrchestratorService,
+    BudgetGuardService,
     BullModule,
   ],
 })

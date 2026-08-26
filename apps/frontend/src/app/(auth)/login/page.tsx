@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { Suspense, useState, FormEvent } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth';
+import { friendlyMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Zap, BarChart3, Target, BrainCircuit } from 'lucide-react';
+import { Zap, BarChart3, Target, BrainCircuit, Info } from 'lucide-react';
 
 const features = [
   { icon: BrainCircuit, label: 'AI Marketing Director', desc: '8 specialized AI agents working for you' },
@@ -14,7 +16,17 @@ const features = [
 ];
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const { login } = useAuth();
+  const searchParams = useSearchParams();
+  const sessionExpired = searchParams.get('reason') === 'session_expired';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,7 +39,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid credentials');
+      setError(friendlyMessage(err));
     } finally {
       setLoading(false);
     }
@@ -90,6 +102,16 @@ export default function LoginPage() {
               Sign in to your workspace
             </p>
           </div>
+
+          {sessionExpired && (
+            <div
+              className="mb-5 flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm animate-fade-in"
+              style={{ background: 'var(--info-bg)', borderColor: 'var(--info-border)', color: 'var(--info-text)' }}
+            >
+              <Info size={16} className="mt-0.5 flex-shrink-0" />
+              <span>Your session expired. Please sign in again.</span>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input

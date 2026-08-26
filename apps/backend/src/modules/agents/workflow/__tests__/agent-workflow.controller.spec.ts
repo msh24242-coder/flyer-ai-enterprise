@@ -2,6 +2,7 @@ import { AgentWorkflowController } from '../agent-workflow.controller';
 import { AgentWorkflowService } from '../agent-workflow.service';
 import { AgentOrchestratorService } from '../../../agent-engine/orchestration/agent-orchestrator.service';
 import { CompanyService } from '../../../company/company.service';
+import { BudgetGuardService } from '../../../agent-engine/budget/budget-guard.service';
 import { AgentType, AgentTaskStatus } from '@prisma/client';
 
 const COMPANY_ID = 'company-abc';
@@ -21,13 +22,18 @@ const mockCompanyService = {
   getCompany: jest.fn(),
 } as unknown as jest.Mocked<CompanyService>;
 
+const mockBudgetGuard = {
+  assertWithinBudget: jest.fn(),
+} as unknown as jest.Mocked<BudgetGuardService>;
+
 describe('AgentWorkflowController', () => {
   let controller: AgentWorkflowController;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockCompanyService.getCompany.mockResolvedValue({ id: COMPANY_ID } as never);
-    controller = new AgentWorkflowController(mockWorkflowService, mockOrchestrator, mockCompanyService);
+    mockBudgetGuard.assertWithinBudget.mockResolvedValue(undefined);
+    controller = new AgentWorkflowController(mockWorkflowService, mockOrchestrator, mockCompanyService, mockBudgetGuard);
   });
 
   // ─── triggerWorkflow ──────────────────────────────────────────────────────
@@ -104,6 +110,19 @@ describe('AgentWorkflowController', () => {
       await controller.triggerWorkflow(COMPANY_ID, USER as never, dto as never);
 
       expect(mockWorkflowService.runFullCampaignWorkflow).toHaveBeenCalled();
+    });
+  });
+
+  describe('triggerWorkflow — budget enforcement', () => {
+    it('rejects and never dispatches when the monthly budget is exceeded', async () => {
+      mockBudgetGuard.assertWithinBudget.mockRejectedValueOnce(new Error('Monthly AI budget exceeded'));
+
+      const dto = { workflowType: 'full_campaign' as const, message: 'Launch Q4 campaign' };
+      await expect(controller.triggerWorkflow(COMPANY_ID, USER as never, dto as never)).rejects.toThrow(
+        'Monthly AI budget exceeded',
+      );
+
+      expect(mockWorkflowService.runFullCampaignWorkflow).not.toHaveBeenCalled();
     });
   });
 

@@ -5,6 +5,7 @@ import { Job } from 'bullmq';
 import { AgentType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AgentOrchestratorService } from '../agent-engine/orchestration/agent-orchestrator.service';
+import { BudgetGuardService } from '../agent-engine/budget/budget-guard.service';
 import { QUEUE_AGENT_TASKS } from '../agent-engine/agent-engine.constants';
 import { AgentExecutionContext } from '../agent-engine/base/agent-engine.types';
 import { StrategyAgent } from './strategy/strategy.agent';
@@ -31,6 +32,7 @@ export class AgentDispatchProcessor extends WorkerHost {
     private readonly moduleRef: ModuleRef,
     private readonly prisma: PrismaService,
     private readonly orchestrator: AgentOrchestratorService,
+    private readonly budgetGuard: BudgetGuardService,
   ) {
     super();
   }
@@ -40,6 +42,11 @@ export class AgentDispatchProcessor extends WorkerHost {
     this.logger.log(`Processing agent task ${agentTaskId} for ${targetAgentType}`);
 
     try {
+      // Defense in depth: triggerWorkflow already checks the budget before enqueuing,
+      // but a job can sit in the queue for a while, and other spend (chat, other
+      // workflows) can push the company over budget in the meantime.
+      await this.budgetGuard.assertWithinBudget(companyId);
+
       // Build execution context from task data
       const context: AgentExecutionContext = {
         companyId,

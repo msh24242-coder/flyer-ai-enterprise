@@ -1,17 +1,28 @@
 'use client';
 
-import { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, KeyboardEvent } from 'react';
 import { useAuth } from '@/context/auth';
-import { api } from '@/lib/api';
+import { api, friendlyMessage } from '@/lib/api';
 import {
   BrainCircuit, Plus, Trash2, Send, ChevronLeft, ChevronRight,
-  Sparkles, Target, Megaphone, BookOpen,
+  Sparkles, Target, Megaphone, BookOpen, Search, Pencil, Archive,
+  Square, RotateCcw, Wrench, CheckCircle2, XCircle, Loader2, ShieldAlert, Check, X,
 } from 'lucide-react';
+
+interface ToolActivity {
+  toolName: string;
+  status: 'running' | 'done' | 'error';
+  durationMs?: number;
+}
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   meta?: string;
+  toolActivity?: ToolActivity[];
+  isStreaming?: boolean;
+  failed?: boolean;
+  pendingApprovalId?: string;
 }
 
 interface Conversation {
@@ -24,6 +35,15 @@ interface Conversation {
   totalCostUsd?: number;
 }
 
+interface ApprovalDetail {
+  id: string;
+  toolName: string;
+  agentType: string;
+  toolInput: unknown;
+  reason?: string;
+  status: string;
+}
+
 const SUGGESTIONS = [
   { icon: Target, text: 'What should our marketing focus be this quarter?' },
   { icon: Megaphone, text: 'Create a Q4 lead generation campaign for us' },
@@ -31,7 +51,20 @@ const SUGGESTIONS = [
   { icon: Sparkles, text: 'Analyze our current marketing performance' },
 ];
 
-function Bubble({ msg }: { msg: Message }) {
+const TOOL_VERB_LABELS: Record<string, string> = {
+  list: 'Listing', create: 'Creating', update: 'Updating', search: 'Searching',
+  store: 'Storing', analyze: 'Analyzing', get: 'Getting', review: 'Reviewing',
+  delete: 'Deleting', generate: 'Generating', find: 'Finding',
+};
+
+function humanizeToolName(toolName: string): string {
+  const [verb, ...rest] = toolName.split('_');
+  const label = TOOL_VERB_LABELS[verb] ?? (verb.charAt(0).toUpperCase() + verb.slice(1));
+  const subject = rest.join(' ');
+  return subject ? `${label} ${subject}…` : `${label}…`;
+}
+
+function Bubble({ msg, onOpenApproval }: { msg: Message; onOpenApproval: (id: string) => void }) {
   const isUser = msg.role === 'user';
   return (
     <div className={`flex gap-3 mb-5 animate-fade-in ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -40,30 +73,173 @@ function Bubble({ msg }: { msg: Message }) {
           <BrainCircuit size={14} className="text-white" />
         </div>
       )}
-      <div
-        className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
-        style={
-          isUser
-            ? { background: 'var(--brand-600)', color: '#ffffff' }
-            : { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }
-        }
-      >
-        <p className="whitespace-pre-wrap">{msg.content}</p>
-        {msg.meta && (
-          <p className="mt-2 text-xs opacity-60">{msg.meta}</p>
+      <div className={`flex flex-col gap-2 max-w-[78%] ${isUser ? 'items-end' : 'items-start'}`}>
+        {!isUser && msg.toolActivity && msg.toolActivity.length > 0 && (
+          <div className="flex flex-col gap-1.5 w-full">
+            {msg.toolActivity.map((activity, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)', color: 'var(--text-secondary)' }}
+              >
+                {activity.status === 'running' ? (
+                  <Loader2 size={12} className="animate-spin text-blue-500" />
+                ) : activity.status === 'error' ? (
+                  <XCircle size={12} className="text-red-500" />
+                ) : (
+                  <CheckCircle2 size={12} className="text-green-500" />
+                )}
+                <Wrench size={11} className="opacity-50" />
+                <span>{humanizeToolName(activity.toolName)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(msg.content || !msg.isStreaming) && (
+          <div
+            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'rounded-tr-sm' : 'rounded-tl-sm'} ${msg.failed ? 'opacity-60' : ''}`}
+            style={
+              isUser
+                ? { background: 'var(--brand-600)', color: '#ffffff' }
+                : { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }
+            }
+          >
+            <p className="whitespace-pre-wrap">
+              {msg.content}
+              {msg.isStreaming && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-current align-middle" />}
+            </p>
+            {msg.meta && <p className="mt-2 text-xs opacity-60">{msg.meta}</p>}
+          </div>
+        )}
+
+        {msg.pendingApprovalId && (
+          <button
+            onClick={() => onOpenApproval(msg.pendingApprovalId!)}
+            className="flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors hover:brightness-95"
+            style={{ background: 'var(--warning-bg)', borderColor: 'var(--warning-border)', color: 'var(--warning-text)' }}
+          >
+            <ShieldAlert size={14} />
+            This action needs your approval — review
+          </button>
         )}
       </div>
     </div>
   );
 }
 
+function ApprovalModal({
+  approval, loading, error, onApprove, onDeny, onClose,
+}: {
+  approval: ApprovalDetail | null;
+  loading: boolean;
+  error: string | null;
+  onApprove: (note?: string) => void;
+  onDeny: (note?: string) => void;
+  onClose: () => void;
+}) {
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState<'approve' | 'deny' | null>(null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'var(--bg-overlay)' }} onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl border p-6 shadow-xl animate-fade-in"
+        style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--warning-bg)' }}>
+            <ShieldAlert size={18} style={{ color: 'var(--warning-text)' }} />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Approval required</h3>
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>An agent wants to perform a sensitive action</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="skeleton h-24 rounded-lg" />
+        ) : error ? (
+          <p className="text-sm" style={{ color: 'var(--error-text)' }}>{error}</p>
+        ) : approval ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border p-3" style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)' }}>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Agent</p>
+              <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{approval.agentType}</p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Tool</p>
+              <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{approval.toolName}</p>
+              {approval.reason && (
+                <>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Reason</p>
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{approval.reason}</p>
+                </>
+              )}
+            </div>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Optional note…"
+              rows={2}
+              className="w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)', color: 'var(--text-primary)' }}
+            />
+            <div className="flex gap-2">
+              <button
+                disabled={submitting !== null}
+                onClick={() => { setSubmitting('deny'); onDeny(note || undefined); }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--bg-muted)] disabled:opacity-50"
+                style={{ borderColor: 'var(--surface-border)', color: 'var(--text-secondary)' }}
+              >
+                <X size={14} /> Deny
+              </button>
+              <button
+                disabled={submitting !== null}
+                onClick={() => { setSubmitting('approve'); onApprove(note || undefined); }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                style={{ background: 'var(--brand-600)' }}
+              >
+                <Check size={14} /> Approve
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function ConvItem({
-  conv, active, onSelect, onDelete,
+  conv, active, onSelect, onDelete, onRename, onArchive,
 }: {
   conv: Conversation; active: boolean; onSelect: () => void; onDelete: () => void;
+  onRename: (title: string) => void; onArchive: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(conv.title ?? '');
   const label = conv.title ?? `Chat ${conv.id.slice(0, 8)}`;
   const date = new Date(conv.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1 px-3 py-1.5">
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && draft.trim()) { onRename(draft.trim()); setEditing(false); }
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          className="w-full rounded-md border px-2 py-1 text-sm outline-none"
+          style={{ background: 'var(--surface-2)', borderColor: 'var(--brand-500)', color: 'var(--text-primary)' }}
+        />
+        <button onClick={() => { if (draft.trim()) onRename(draft.trim()); setEditing(false); }} className="flex-shrink-0">
+          <Check size={14} className="text-green-600" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -77,14 +253,30 @@ function ConvItem({
       <span className="flex-1 truncate text-sm font-medium" style={{ color: active ? 'var(--info-text)' : 'var(--text-secondary)' }}>
         {label}
       </span>
-      <span className="flex-shrink-0 text-xs" style={{ color: 'var(--text-tertiary)' }}>{date}</span>
-      <button
-        className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors flex-shrink-0"
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        title="Delete"
-      >
-        <Trash2 size={12} />
-      </button>
+      <span className="flex-shrink-0 text-xs group-hover:hidden" style={{ color: 'var(--text-tertiary)' }}>{date}</span>
+      <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
+        <button
+          className="flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--bg-muted)] transition-colors"
+          onClick={(e) => { e.stopPropagation(); setDraft(conv.title ?? ''); setEditing(true); }}
+          title="Rename"
+        >
+          <Pencil size={11} style={{ color: 'var(--text-tertiary)' }} />
+        </button>
+        <button
+          className="flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--bg-muted)] transition-colors"
+          onClick={(e) => { e.stopPropagation(); onArchive(); }}
+          title="Archive"
+        >
+          <Archive size={11} style={{ color: 'var(--text-tertiary)' }} />
+        </button>
+        <button
+          className="flex h-5 w-5 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          title="Delete"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -99,8 +291,15 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [search, setSearch] = useState('');
+  const [openApprovalId, setOpenApprovalId] = useState<string | null>(null);
+  const [approval, setApproval] = useState<ApprovalDetail | null>(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const lastFailedRef = useRef<string | null>(null);
 
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
@@ -123,7 +322,14 @@ export default function ChatPage() {
     api.agent.listConversations(companyId, token).then(setConversations).catch(() => {});
   }
 
+  const filteredConversations = useMemo(() => {
+    if (!search.trim()) return conversations;
+    const q = search.trim().toLowerCase();
+    return conversations.filter((c) => (c.title ?? `Chat ${c.id.slice(0, 8)}`).toLowerCase().includes(q));
+  }, [conversations, search]);
+
   function newConversation() {
+    abortRef.current?.abort();
     setConversationId(null);
     setMessages([]);
     setError(null);
@@ -136,43 +342,148 @@ export default function ChatPage() {
       await api.agent.deleteConversation(companyId, token, conv.id);
       setConversations((prev) => prev.filter((c) => c.id !== conv.id));
       if (conversationId === conv.id) newConversation();
-    } catch {}
+    } catch (err) {
+      setError(friendlyMessage(err));
+    }
+  }
+
+  async function renameConversation(conv: Conversation, title: string) {
+    if (!companyId || !token) return;
+    const previous = conversations;
+    setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, title } : c)));
+    try {
+      await api.agent.renameConversation(companyId, token, conv.id, title);
+    } catch (err) {
+      setConversations(previous);
+      setError(friendlyMessage(err));
+    }
+  }
+
+  async function archiveConversation(conv: Conversation) {
+    if (!companyId || !token) return;
+    try {
+      await api.agent.archiveConversation(companyId, token, conv.id);
+      setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+      if (conversationId === conv.id) newConversation();
+    } catch (err) {
+      setError(friendlyMessage(err));
+    }
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
+    setLoading(false);
+    setMessages((prev) => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last && last.role === 'assistant' && last.isStreaming) {
+        next[next.length - 1] = { ...last, isStreaming: false, meta: 'Stopped' };
+      }
+      return next;
+    });
   }
 
   async function sendMessage(text?: string) {
     const msg = (text ?? input).trim();
     if (!msg || loading || !user || !accessToken) return;
 
-    setMessages((prev) => [...prev, { role: 'user', content: msg }]);
+    lastFailedRef.current = null;
+    setMessages((prev) => [...prev, { role: 'user', content: msg }, { role: 'assistant', content: '', isStreaming: true, toolActivity: [] }]);
     setInput('');
     setLoading(true);
     setError(null);
 
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let sawConversationId = conversationId;
+
+    const updateAssistant = (fn: (m: Message) => Message) => {
+      setMessages((prev) => {
+        const next = [...prev];
+        const idx = next.length - 1;
+        if (next[idx]?.role === 'assistant') next[idx] = fn(next[idx]);
+        return next;
+      });
+    };
+
+    await api.agent.stream(
+      companyId, token, msg, conversationId ?? undefined, undefined,
+      {
+        onConversationId: (id) => {
+          if (!sawConversationId) {
+            sawConversationId = id;
+            setConversationId(id);
+          }
+        },
+        onToken: (delta) => updateAssistant((m) => ({ ...m, content: m.content + delta })),
+        onToolStart: (toolName) => updateAssistant((m) => ({
+          ...m, toolActivity: [...(m.toolActivity ?? []), { toolName, status: 'running' }],
+        })),
+        onToolResult: (toolName, durationMs, isError) => updateAssistant((m) => {
+          const activity = [...(m.toolActivity ?? [])];
+          const idx = activity.map((a) => a.toolName).lastIndexOf(toolName);
+          if (idx !== -1) activity[idx] = { ...activity[idx], status: isError ? 'error' : 'done', durationMs };
+          return { ...m, toolActivity: activity };
+        }),
+        onDone: (result) => {
+          const metaParts = [
+            result.traceResult?.iterations != null ? `${result.traceResult.iterations} steps` : null,
+            result.traceResult?.estimatedCostUsd != null ? `$${Number(result.traceResult.estimatedCostUsd).toFixed(4)}` : null,
+          ].filter(Boolean);
+          updateAssistant((m) => ({
+            ...m,
+            content: result.response,
+            isStreaming: false,
+            meta: metaParts.join(' · ') || undefined,
+            pendingApprovalId: result.pendingApprovalId,
+          }));
+          refreshConversations();
+        },
+        onError: (message) => {
+          lastFailedRef.current = msg;
+          setError(message);
+          setMessages((prev) => prev.slice(0, -2));
+          setInput(msg);
+        },
+      },
+      controller.signal,
+    );
+
+    setLoading(false);
+    abortRef.current = null;
+  }
+
+  function retryLastMessage() {
+    const failed = lastFailedRef.current;
+    if (failed) sendMessage(failed);
+  }
+
+  async function openApproval(id: string) {
+    setOpenApprovalId(id);
+    setApproval(null);
+    setApprovalError(null);
+    setApprovalLoading(true);
     try {
-      const data = await api.agent.run(companyId, token, msg, conversationId ?? undefined);
-      if (!conversationId) setConversationId(data.conversationId);
-
-      const metaParts = [
-        data.iterations != null ? `${data.iterations} steps` : null,
-        data.estimatedCostUsd != null ? `$${Number(data.estimatedCostUsd).toFixed(4)}` : null,
-      ].filter(Boolean);
-
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: data.response, meta: metaParts.join(' · ') || undefined },
-      ]);
-      refreshConversations();
+      const detail = await api.approvals.getOne(companyId, token, id);
+      setApproval(detail as ApprovalDetail);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : 'Request failed';
-      setError(errMsg);
-      setMessages((prev) => prev.slice(0, -1));
-      setInput(msg);
+      setApprovalError(friendlyMessage(err));
     } finally {
-      setLoading(false);
+      setApprovalLoading(false);
+    }
+  }
+
+  async function resolveApproval(decision: 'approve' | 'deny', note?: string) {
+    if (!openApprovalId) return;
+    try {
+      if (decision === 'approve') await api.approvals.approve(companyId, token, openApprovalId, note);
+      else await api.approvals.deny(companyId, token, openApprovalId, note);
+      setOpenApprovalId(null);
+      setMessages((prev) => prev.map((m) => (m.pendingApprovalId === openApprovalId ? { ...m, pendingApprovalId: undefined } : m)));
+    } catch (err) {
+      setApprovalError(friendlyMessage(err));
     }
   }
 
@@ -188,7 +499,7 @@ export default function ChatPage() {
       {/* Conversation sidebar */}
       {sidebarOpen && (
         <div
-          className="flex w-56 flex-shrink-0 flex-col border-r"
+          className="flex w-60 flex-shrink-0 flex-col border-r"
           style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
         >
           <div className="flex items-center justify-between border-b px-3 py-3" style={{ borderColor: 'var(--surface-border)' }}>
@@ -204,31 +515,45 @@ export default function ChatPage() {
             </button>
           </div>
 
+          <div className="border-b px-2 py-2" style={{ borderColor: 'var(--surface-border)' }}>
+            <div className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5" style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)' }}>
+              <Search size={12} style={{ color: 'var(--text-tertiary)' }} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search conversations"
+                className="w-full bg-transparent text-xs outline-none"
+                style={{ color: 'var(--text-primary)' }}
+              />
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
             {loadingConvs ? (
               <div className="space-y-1.5 px-1 py-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-9 skeleton rounded-lg" />
-                ))}
+                {[1, 2, 3].map((i) => <div key={i} className="h-9 skeleton rounded-lg" />)}
               </div>
-            ) : conversations.length === 0 ? (
+            ) : filteredConversations.length === 0 ? (
               <p className="py-6 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                No conversations yet
+                {search ? 'No matching conversations.' : 'No conversations yet'}
               </p>
             ) : (
-              conversations.map((conv) => (
+              filteredConversations.map((conv) => (
                 <ConvItem
                   key={conv.id}
                   conv={conv}
                   active={conv.id === conversationId}
                   onSelect={() => {
                     if (conv.id !== conversationId) {
+                      abortRef.current?.abort();
                       setConversationId(conv.id);
                       setMessages([]);
                       setError(null);
                     }
                   }}
                   onDelete={() => deleteConversation(conv)}
+                  onRename={(title) => renameConversation(conv, title)}
+                  onArchive={() => archiveConversation(conv)}
                 />
               ))
             )}
@@ -277,7 +602,7 @@ export default function ChatPage() {
                 <BrainCircuit size={28} className="text-white" />
               </div>
               <h3 className="mb-2 text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Marketing Director Agent
+                Meet your Marketing Director
               </h3>
               <p className="mb-8 max-w-md text-sm" style={{ color: 'var(--text-tertiary)' }}>
                 Your AI marketing expert with access to goals, campaigns, content, and company knowledge.
@@ -304,31 +629,24 @@ export default function ChatPage() {
           )}
 
           {messages.map((msg, i) => (
-            <Bubble key={i} msg={msg} />
+            <Bubble key={i} msg={msg} onOpenApproval={openApproval} />
           ))}
-
-          {loading && (
-            <div className="flex gap-3 mb-5 animate-fade-in">
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 shadow-sm">
-                <BrainCircuit size={14} className="text-white" />
-              </div>
-              <div
-                className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm px-5 py-3"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--surface-border)' }}
-              >
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          )}
 
           {error && (
             <div
-              className="mb-4 rounded-xl border px-4 py-3 text-sm animate-fade-in"
+              className="mb-4 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm animate-fade-in"
               style={{ background: 'var(--error-bg)', borderColor: 'var(--error-border)', color: 'var(--error-text)' }}
             >
-              <span className="font-medium">Error: </span>{error}
+              <span>{error}</span>
+              {lastFailedRef.current && (
+                <button
+                  onClick={retryLastMessage}
+                  className="flex flex-shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-white/40"
+                  style={{ borderColor: 'var(--error-border)' }}
+                >
+                  <RotateCcw size={11} /> Try again
+                </button>
+              )}
             </div>
           )}
 
@@ -350,8 +668,9 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask the Marketing Director… (Enter to send)"
+              placeholder="Ask the Marketing Director… (Enter to send, Shift+Enter for newline)"
               disabled={loading}
+              aria-label="Message the Marketing Director"
               className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:opacity-50 disabled:cursor-not-allowed"
               style={{ color: 'var(--text-primary)', maxHeight: 120 }}
               onInput={(e) => {
@@ -360,19 +679,44 @@ export default function ChatPage() {
                 el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
               }}
             />
-            <button
-              onClick={() => sendMessage()}
-              disabled={loading || !input.trim()}
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Send size={14} />
-            </button>
+            {loading ? (
+              <button
+                onClick={stopGeneration}
+                title="Stop generating"
+                aria-label="Stop generating"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white transition-all hover:bg-red-700"
+                style={{ background: 'var(--error-text)' }}
+              >
+                <Square size={12} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                onClick={() => sendMessage()}
+                disabled={!input.trim()}
+                title="Send message"
+                aria-label="Send message"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Send size={14} />
+              </button>
+            )}
           </div>
           <p className="mt-2 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            Real AI responses · Shift+Enter for newline
+            Real AI responses, streamed live · Shift+Enter for newline
           </p>
         </div>
       </div>
+
+      {openApprovalId && (
+        <ApprovalModal
+          approval={approval}
+          loading={approvalLoading}
+          error={approvalError}
+          onApprove={(note) => resolveApproval('approve', note)}
+          onDeny={(note) => resolveApproval('deny', note)}
+          onClose={() => setOpenApprovalId(null)}
+        />
+      )}
     </div>
   );
 }

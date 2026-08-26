@@ -10,6 +10,7 @@ import { CompanyRepository } from '../../company/company.repository';
 import { ConversationRepository } from '../repositories/conversation.repository';
 import { MarketingDirectorAgent } from '../marketing-director.agent';
 import { MemoryService } from '../../agent-engine/memory/memory.service';
+import { BudgetGuardService } from '../../agent-engine/budget/budget-guard.service';
 import { AuditService } from '../../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
 import { AgentType } from '@prisma/client';
@@ -58,6 +59,10 @@ const mockPrisma = {
   },
 };
 
+const mockBudgetGuard = {
+  assertWithinBudget: jest.fn().mockResolvedValue(undefined),
+} as unknown as jest.Mocked<BudgetGuardService>;
+
 function makeService(): MarketingAgentService {
   return new MarketingAgentService(
     mockCompanyRepo,
@@ -67,6 +72,7 @@ function makeService(): MarketingAgentService {
     mockConfig,
     mockAuditService,
     mockPrisma as never,
+    mockBudgetGuard,
   );
 }
 

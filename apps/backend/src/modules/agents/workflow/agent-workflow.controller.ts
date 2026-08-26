@@ -16,6 +16,7 @@ import { AuthenticatedUser } from '../../auth/auth.types';
 import { CompanyService } from '../../company/company.service';
 import { AgentWorkflowService, WorkflowType } from './agent-workflow.service';
 import { AgentOrchestratorService } from '../../agent-engine/orchestration/agent-orchestrator.service';
+import { BudgetGuardService } from '../../agent-engine/budget/budget-guard.service';
 
 class TriggerWorkflowDto {
   @IsString()
@@ -44,6 +45,7 @@ export class AgentWorkflowController {
     private readonly workflowService: AgentWorkflowService,
     private readonly orchestrator: AgentOrchestratorService,
     private readonly companyService: CompanyService,
+    private readonly budgetGuard: BudgetGuardService,
   ) {}
 
   @Post()
@@ -54,6 +56,7 @@ export class AgentWorkflowController {
     @Body() dto: TriggerWorkflowDto,
   ) {
     await this.assertMembership(companyId, user.id);
+    await this.budgetGuard.assertWithinBudget(companyId);
     const input = {
       companyId,
       requestedByUserId: user.id,

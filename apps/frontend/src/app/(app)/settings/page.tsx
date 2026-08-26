@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
+import { useTheme, ThemeChoice } from '@/context/theme';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/ui/page-header';
-import { User, BrainCircuit, DollarSign, Shield, Check } from 'lucide-react';
+import { User, BrainCircuit, DollarSign, Shield, Check, Monitor, Sun, Moon } from 'lucide-react';
 
 type AiConfig = {
   defaultModel?: string;
@@ -45,8 +46,15 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+const THEME_OPTIONS: Array<{ value: ThemeChoice; label: string; icon: React.ElementType }> = [
+  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+];
+
 export default function SettingsPage() {
   const { user, accessToken } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [aiConfig, setAiConfig] = useState<AiConfig>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,7 +70,7 @@ export default function SettingsPage() {
       .then((data) => setAiConfig((data.aiConfig as AiConfig) ?? {}))
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load settings'))
       .finally(() => setLoading(false));
-  }, [user, accessToken]);
+  }, [companyId, token]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -98,6 +106,27 @@ export default function SettingsPage() {
           ) : (
             <Skeleton className="h-20 w-full" />
           )}
+        </Section>
+
+        {/* Appearance */}
+        <Section icon={Monitor} title="Appearance" description="Choose how SH Marketing looks on this device">
+          <div className="grid grid-cols-3 gap-2">
+            {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => setTheme(value)}
+                className="flex flex-col items-center gap-2 rounded-xl border py-4 text-sm font-medium transition-colors"
+                style={{
+                  background: theme === value ? 'var(--info-bg)' : 'var(--surface-2)',
+                  borderColor: theme === value ? 'var(--info-border)' : 'var(--surface-border)',
+                  color: theme === value ? 'var(--info-text)' : 'var(--text-secondary)',
+                }}
+              >
+                <Icon size={18} />
+                {label}
+              </button>
+            ))}
+          </div>
         </Section>
 
         {/* AI Config */}

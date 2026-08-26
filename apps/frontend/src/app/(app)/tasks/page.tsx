@@ -47,7 +47,7 @@ export default function TasksPage() {
       .then(setTasks)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load tasks'))
       .finally(() => setLoading(false));
-  }, [user, accessToken]);
+  }, [companyId, token]);
 
   async function handleStatusChange(taskId: string, status: string) {
     setUpdatingId(taskId);

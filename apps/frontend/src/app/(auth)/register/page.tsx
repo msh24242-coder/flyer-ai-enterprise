@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth';
+import { friendlyMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Zap, Check } from 'lucide-react';
@@ -65,7 +66,7 @@ export default function RegisterPage() {
     try {
       await register(form);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      setError(friendlyMessage(err));
     } finally {
       setLoading(false);
     }

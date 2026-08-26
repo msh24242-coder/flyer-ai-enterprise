@@ -4,6 +4,7 @@ import { CompanyRepository } from '../../company/company.repository';
 import { ConversationRepository } from '../repositories/conversation.repository';
 import { MarketingDirectorAgent } from '../marketing-director.agent';
 import { MemoryService } from '../../agent-engine/memory/memory.service';
+import { BudgetGuardService } from '../../agent-engine/budget/budget-guard.service';
 import { AuditService } from '../../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
 import { AgentType } from '@prisma/client';
@@ -60,6 +61,10 @@ const mockPrisma = {
   },
 };
 
+const mockBudgetGuard = {
+  assertWithinBudget: jest.fn().mockResolvedValue(undefined),
+} as unknown as jest.Mocked<BudgetGuardService>;
+
 function makeService(): MarketingAgentService {
   return new MarketingAgentService(
     mockCompanyRepo,
@@ -69,6 +74,7 @@ function makeService(): MarketingAgentService {
     mockConfig,
     mockAuditService,
     mockPrisma as never,
+    mockBudgetGuard,
   );
 }
 
@@ -322,7 +328,9 @@ describe('MarketingAgentService', () => {
   it('throws BadRequestException when monthly budget is exceeded', async () => {
     mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
     mockCompanyRepo.findById.mockResolvedValue({ id: COMPANY_A, name: 'Acme', aiConfig: { monthlyBudgetUsd: 10 } } as never);
-    mockPrisma.agentExecution.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 10.5 } });
+    mockBudgetGuard.assertWithinBudget.mockRejectedValueOnce(
+      new BadRequestException('Monthly AI budget of $10 has been reached ($10.5000 spent).'),
+    );
 
     await expect(
       service.run({ companyId: COMPANY_A, userId: USER_A, message: 'Hello' }),
@@ -334,12 +342,27 @@ describe('MarketingAgentService', () => {
   it('proceeds when spend is below budget', async () => {
     mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
     mockCompanyRepo.findById.mockResolvedValue({ id: COMPANY_A, name: 'Acme', aiConfig: { monthlyBudgetUsd: 100 } } as never);
-    mockPrisma.agentExecution.aggregate.mockResolvedValue({ _sum: { estimatedCostUsd: 5 } });
     mockConvRepo.create.mockResolvedValue({ id: 'conv-1' } as never);
 
     await service.run({ companyId: COMPANY_A, userId: USER_A, message: 'Hello' });
 
     expect(mockAgent.execute).toHaveBeenCalled();
+    expect(mockBudgetGuard.assertWithinBudget).toHaveBeenCalledWith(COMPANY_A);
+  });
+
+  it('runStream also enforces the monthly budget (regression: this path used to skip it entirely)', async () => {
+    mockCompanyRepo.findMemberInCompany.mockResolvedValue(makeActiveMember(COMPANY_A, USER_A) as never);
+    mockCompanyRepo.findById.mockResolvedValue({ id: COMPANY_A, name: 'Acme', aiConfig: { monthlyBudgetUsd: 10 } } as never);
+    mockConvRepo.create.mockResolvedValue({ id: 'conv-1' } as never);
+    mockBudgetGuard.assertWithinBudget.mockRejectedValueOnce(
+      new BadRequestException('Monthly AI budget of $10 has been reached.'),
+    );
+
+    await expect(
+      service.runStream({ companyId: COMPANY_A, userId: USER_A, message: 'Hello' }, jest.fn()),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(mockAgent.executeStream).not.toHaveBeenCalled();
   });
 
   // ── Output ────────────────────────────────────────────────────────────────

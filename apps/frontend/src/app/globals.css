@@ -87,8 +87,10 @@
 }
 
 /* ─── Dark Mode ──────────────────────────────────────────────────────────── */
+/* Applies when the OS prefers dark AND the user hasn't explicitly chosen "light"
+   via the in-app theme switcher (data-theme="light" on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg-base: #0f1117;
     --bg-subtle: #141924;
     --bg-muted: #1a2130;
@@ -118,6 +120,38 @@
     --info-border: #1d4ed8;
     --info-text: #93c5fd;
   }
+}
+
+/* Explicit "Dark" choice from the in-app theme switcher, regardless of OS preference. */
+:root[data-theme="dark"] {
+  --bg-base: #0f1117;
+  --bg-subtle: #141924;
+  --bg-muted: #1a2130;
+  --bg-emphasis: #243048;
+
+  --surface-1: #141924;
+  --surface-2: #1a2130;
+  --surface-3: #243048;
+  --surface-border: #2a3754;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-placeholder: #475569;
+  --text-brand: #60a5fa;
+
+  --success-bg: #052e16;
+  --success-border: #166534;
+  --success-text: #4ade80;
+  --warning-bg: #1c1006;
+  --warning-border: #854d0e;
+  --warning-text: #fbbf24;
+  --error-bg: #1c0505;
+  --error-border: #991b1b;
+  --error-text: #f87171;
+  --info-bg: #0c1a3d;
+  --info-border: #1d4ed8;
+  --info-text: #93c5fd;
 }
 
 /* ─── Base ───────────────────────────────────────────────────────────────── */

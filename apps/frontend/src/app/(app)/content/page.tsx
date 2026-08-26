@@ -64,7 +64,7 @@ export default function ContentPage() {
       .then(setItems)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load content'))
       .finally(() => setLoading(false));
-  }, [user, accessToken, filter]);
+  }, [companyId, token, filter]);
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this content?')) return;

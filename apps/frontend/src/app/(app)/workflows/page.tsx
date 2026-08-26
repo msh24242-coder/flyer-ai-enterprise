@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/auth';
-import { api } from '@/lib/api';
+import { api, friendlyMessage } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,9 @@ function statusVariant(s: TaskStatus): BadgeVariant {
   return map[s] ?? 'default';
 }
 
+const TERMINAL_STATUSES: TaskStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED'];
+const POLL_INTERVAL_MS = 3000;
+
 export default function WorkflowsPage() {
   const { user, accessToken } = useAuth();
   const [selectedType, setSelectedType] = useState<WorkflowType>('full_campaign');
@@ -54,6 +57,39 @@ export default function WorkflowsPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<WorkflowResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  function startPolling(companyId: string, token: string, tasks: WorkflowTask[]) {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      const pending = tasks.filter((t) => !TERMINAL_STATUSES.includes(t.status));
+      if (pending.length === 0) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        return;
+      }
+      const updates = await Promise.all(
+        pending.map(async (t) => {
+          try {
+            const status = await api.workflows.getTaskStatus(companyId, token, t.taskId);
+            return status ? { taskId: t.taskId, status: status.status as TaskStatus } : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      updates.forEach((u) => {
+        if (!u) return;
+        const task = tasks.find((t) => t.taskId === u.taskId);
+        if (task) task.status = u.status;
+      });
+      setResult((current) => (current ? { ...current, tasks: [...tasks] } : current));
+      if (tasks.every((t) => TERMINAL_STATUSES.includes(t.status)) && pollRef.current) {
+        clearInterval(pollRef.current);
+      }
+    }, POLL_INTERVAL_MS);
+  }
 
   async function handleTrigger() {
     if (!user || !accessToken || !message.trim()) return;
@@ -64,8 +100,9 @@ export default function WorkflowsPage() {
       const data = await api.workflows.trigger(user.companyId, accessToken, selectedType, message.trim());
       setResult(data as WorkflowResult);
       setMessage('');
+      startPolling(user.companyId, accessToken, (data as WorkflowResult).tasks);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to trigger workflow');
+      setError(friendlyMessage(err));
     } finally {
       setLoading(false);
     }
@@ -183,7 +220,7 @@ export default function WorkflowsPage() {
               ))}
             </div>
             <p className="mt-2.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              Tasks are processed asynchronously. Check the Content and Approvals pages for results.
+              Status updates automatically every few seconds. Check the Content and Approvals pages for results.
             </p>
           </div>
         )}

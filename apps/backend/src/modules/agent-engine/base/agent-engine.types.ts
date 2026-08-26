@@ -25,7 +25,7 @@ export interface AgentExecutionResult {
 }
 
 export type AgentStreamEventType =
-  | { type: 'agent_start'; agentType: string }
+  | { type: 'agent_start'; agentType: string; conversationId?: string }
   | { type: 'tool_start'; toolName: string; input: Record<string, unknown> }
   | { type: 'tool_result'; toolName: string; durationMs: number; isError: boolean }
   | { type: 'token'; delta: string }

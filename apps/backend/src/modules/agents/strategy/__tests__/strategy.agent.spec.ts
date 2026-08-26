@@ -18,7 +18,7 @@ const mockMarketingRepo = {
 };
 const mockPrisma = {};
 const mockEmbeddingProvider = {};
-const mockAiProvider = {};
+const mockAiProvider = { stream: jest.fn() };
 
 function makeAgent() {
   return new StrategyAgent(
@@ -123,6 +123,30 @@ describe('StrategyAgent', () => {
     it('no two tools share the same name', () => {
       const names = agentWithCtx().defineTools().map((t) => t.tool.name);
       expect(new Set(names).size).toBe(names.length);
+    });
+  });
+
+  describe('executeStream', () => {
+    it('emits agent_start with the conversationId before any tokens', async () => {
+      mockTracer.finalizeTrace = jest.fn().mockResolvedValue({ traceId: 'trace-1' });
+      mockAiProvider.stream.mockImplementation(async (_req: unknown, onProviderEvent: (e: unknown) => void) => {
+        onProviderEvent({ type: 'text_delta', delta: 'Hi' });
+        return {
+          messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Hi' }] }],
+          stopReason: 'end_turn',
+        };
+      });
+
+      const agent = makeAgent();
+      (agent as unknown as { ctx: typeof baseCtx }).ctx = baseCtx;
+
+      const events: Array<{ type: string }> = [];
+      await agent.executeStream(
+        { ...baseCtx, conversationId: 'conv-42' },
+        (event) => events.push(event),
+      );
+
+      expect(events[0]).toEqual({ type: 'agent_start', agentType: AgentType.STRATEGY, conversationId: 'conv-42' });
     });
   });
 

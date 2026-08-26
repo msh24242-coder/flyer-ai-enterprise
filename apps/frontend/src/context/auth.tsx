@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, setSessionHandlers } from '@/lib/api';
 
 interface User {
   id: string;
@@ -82,6 +82,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, isLoading: false }));
     }
   }, []);
+
+  // Registered once so the API client can refresh an expired access token (and,
+  // if the refresh token itself is no longer valid, force a clean logout)
+  // without importing this module directly and creating a circular import.
+  useEffect(() => {
+    setSessionHandlers({
+      getRefreshToken: () => loadSession()?.refreshToken ?? null,
+      onTokensRefreshed: (accessToken, refreshToken) => {
+        const session = loadSession();
+        if (!session) return;
+        const updated: StoredSession = { ...session, accessToken, refreshToken };
+        saveSession(updated);
+        setState((s) => ({ ...s, accessToken }));
+      },
+      onSessionExpired: () => {
+        clearSession();
+        setState({ user: null, accessToken: null, isLoading: false });
+        router.push('/login?reason=session_expired');
+      },
+    });
+    return () => setSessionHandlers(null);
+  }, [router]);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.auth.login(email, password);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
@@ -25,7 +25,7 @@ export default function KnowledgePage() {
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
 
-  async function loadEntries() {
+  const loadEntries = useCallback(async () => {
     if (!companyId || !token) return;
     try {
       const data = await api.knowledge.list(companyId, token);
@@ -35,9 +35,9 @@ export default function KnowledgePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [companyId, token]);
 
-  useEffect(() => { loadEntries(); }, [user, accessToken]);
+  useEffect(() => { loadEntries(); }, [loadEntries]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();

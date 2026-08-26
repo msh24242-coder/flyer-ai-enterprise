@@ -11,7 +11,9 @@ import {
   HttpCode,
   HttpStatus,
   Sse,
+  RequestMethod,
 } from '@nestjs/common';
+import { METHOD_METADATA } from '@nestjs/common/constants';
 import { Observable, Subject } from 'rxjs';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -52,9 +54,15 @@ export class MarketingAgentController {
    * POST /companies/:companyId/agents/marketing-director/run/stream
    *
    * SSE endpoint that streams real agent events as Server-Sent Events.
-   * Event types: agent_start, tool_start, tool_result, token, agent_done, agent_error.
+   * Registered as POST (via the `@Sse` method override) because it accepts a JSON
+   * body — a plain GET SSE route can't carry one through `fetch()`, which is what
+   * an authenticated browser client must use here (native EventSource can't send
+   * custom Authorization headers or a body).
+   * Event types: agent_start (includes conversationId), tool_start, tool_result,
+   * token, agent_done (includes result.pendingApprovalId when approval is needed),
+   * agent_error.
    */
-  @Sse('run/stream')
+  @Sse('run/stream', { [METHOD_METADATA]: RequestMethod.POST })
   @Throttle({ default: { ttl: 60_000, limit: 20 } })
   stream(
     @Param('companyId', ParseUUIDPipe) companyId: string,

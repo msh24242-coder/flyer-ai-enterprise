@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
@@ -36,7 +36,7 @@ export default function ApprovalsPage() {
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
 
-  async function loadApprovals() {
+  const loadApprovals = useCallback(async () => {
     if (!companyId || !token) return;
     setLoading(true);
     try {
@@ -48,9 +48,9 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [companyId, token, filter]);
 
-  useEffect(() => { loadApprovals(); }, [user, accessToken, filter]);
+  useEffect(() => { loadApprovals(); }, [loadApprovals]);
 
   async function handleApprove(id: string) {
     setActionLoading(id);
