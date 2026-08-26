@@ -1,7 +1,9 @@
+name: sh-marketing
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: marketing-os-postgres
+    container_name: sh-marketing-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -9,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - marketing-os-network
+      - sh-marketing-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-marketing_os}"]
       interval: 10s
@@ -19,11 +21,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: marketing-os-redis
+    container_name: sh-marketing-redis
     volumes:
       - redis_data:/data
     networks:
-      - marketing-os-network
+      - sh-marketing-network
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
@@ -36,19 +38,26 @@ services:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
-    container_name: marketing-os-backend
+    container_name: sh-marketing-backend
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marketing_os}
+      DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marketing_os}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      AI_MODEL: ${AI_MODEL:-claude-opus-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-voyage}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3-lite}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       PORT: 3001
     ports:
       - "3001:3001"
     networks:
-      - marketing-os-network
+      - sh-marketing-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,14 +77,14 @@ services:
       dockerfile: apps/frontend/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
-    container_name: marketing-os-frontend
+    container_name: sh-marketing-frontend
     environment:
       NODE_ENV: production
       PORT: 3000
     ports:
       - "3000:3000"
     networks:
-      - marketing-os-network
+      - sh-marketing-network
     depends_on:
       backend:
         condition: service_healthy
@@ -83,8 +92,11 @@ services:
 
 volumes:
   postgres_data:
+    name: sh_marketing_postgres_data
   redis_data:
+    name: sh_marketing_redis_data
 
 networks:
-  marketing-os-network:
+  sh-marketing-network:
     driver: bridge
+    name: sh-marketing-network

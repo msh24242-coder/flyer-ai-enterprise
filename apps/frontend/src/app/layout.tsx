@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: { default: 'AI Marketing OS', template: '%s · AI Marketing OS' },
-  description: 'Enterprise AI-powered marketing operations platform',
+  title: { default: 'SH Marketing', template: '%s · SH Marketing' },
+  description: 'SH Marketing — enterprise AI-powered marketing operations platform',
   robots: { index: false },
 };
 

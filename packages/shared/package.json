@@ -1,5 +1,5 @@
 {
-  "name": "@marketing-os/shared",
+  "name": "@sh-marketing/shared",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",

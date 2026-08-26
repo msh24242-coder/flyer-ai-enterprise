@@ -42,7 +42,7 @@ export default function LoginPage() {
             <Zap size={16} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-100">Marketing OS</p>
+            <p className="text-sm font-semibold text-slate-100">SH Marketing</p>
             <p className="text-[10px] text-slate-500">AI Enterprise Platform</p>
           </div>
         </div>
@@ -53,7 +53,7 @@ export default function LoginPage() {
             <span className="text-blue-400">amplified by AI.</span>
           </h2>
           <p className="text-slate-400 text-base mb-10 max-w-sm">
-            An enterprise AI Marketing OS with 8 specialized agents, real-time analytics,
+            An enterprise AI marketing platform with 8 specialized agents, real-time analytics,
             and intelligent automation that scales with your team.
           </p>
           <div className="space-y-4">
@@ -71,7 +71,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="text-xs text-slate-600">© 2026 Marketing OS. Enterprise AI Platform.</p>
+        <p className="text-xs text-slate-600">© 2026 SH Marketing. Enterprise AI Platform.</p>
       </div>
 
       {/* Right form panel */}
@@ -81,7 +81,7 @@ export default function LoginPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
               <Zap size={14} className="text-white" />
             </div>
-            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Marketing OS</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>SH Marketing</span>
           </div>
 
           <div className="mb-8">

@@ -112,7 +112,7 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-100 leading-tight">Marketing OS</p>
+            <p className="text-sm font-semibold text-slate-100 leading-tight">SH Marketing</p>
             <p className="text-[10px] text-slate-500 leading-tight mt-0.5">AI Enterprise</p>
           </div>
         )}

@@ -1,4 +1,4 @@
-# AI Marketing OS — Implementation Plan
+# SH Marketing — Implementation Plan
 
 **Version**: 2.0  
 **Status**: Design (awaiting approval)  
@@ -49,7 +49,7 @@
 ### 0.2 Monorepo Workspace Setup
 
 ```
-ai-marketing-os/
+sh-marketing/
 ├── backend/          ← NestJS 11 API
 ├── frontend/         ← Next.js 15 App
 ├── package.json      ← workspace root (pnpm workspaces)
@@ -59,7 +59,7 @@ ai-marketing-os/
 **Root `package.json`**:
 ```json
 {
-  "name": "ai-marketing-os",
+  "name": "sh-marketing",
   "private": true,
   "workspaces": ["backend", "frontend"],
   "engines": { "node": ">=20" }

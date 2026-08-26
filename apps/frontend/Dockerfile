@@ -13,8 +13,8 @@ RUN npm ci --workspace=apps/frontend --include-workspace-root 2>/dev/null || \
 FROM node:22-alpine AS builder
 WORKDIR /app
 
+COPY package.json package-lock.json ./
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/frontend/node_modules ./apps/frontend/node_modules 2>/dev/null || true
 
 COPY apps/frontend/package.json ./apps/frontend/
 COPY apps/frontend/tsconfig.json ./apps/frontend/

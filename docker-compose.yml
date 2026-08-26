@@ -1,7 +1,9 @@
+name: sh-marketing
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: marketing-os-postgres
+    container_name: sh-marketing-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -11,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - marketing-os-network
+      - sh-marketing-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d marketing_os_dev"]
       interval: 10s
@@ -21,13 +23,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: marketing-os-redis
+    container_name: sh-marketing-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - marketing-os-network
+      - sh-marketing-network
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -38,8 +40,11 @@ services:
 
 volumes:
   postgres_data:
+    name: sh_marketing_postgres_data
   redis_data:
+    name: sh_marketing_redis_data
 
 networks:
-  marketing-os-network:
+  sh-marketing-network:
     driver: bridge
+    name: sh-marketing-network

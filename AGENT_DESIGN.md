@@ -1,4 +1,4 @@
-# AI Marketing OS — Agent Design
+# SH Marketing — Agent Design
 
 **Version**: 2.0  
 **Status**: Design (awaiting approval)  

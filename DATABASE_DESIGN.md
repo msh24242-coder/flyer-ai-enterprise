@@ -1,4 +1,4 @@
-# AI Marketing OS — Database Design
+# SH Marketing — Database Design
 
 **Version**: 2.0  
 **Status**: Design (awaiting approval)  

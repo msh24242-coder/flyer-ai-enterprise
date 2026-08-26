@@ -26,8 +26,8 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('AI Marketing OS API')
-    .setDescription('Backend API for the AI Marketing OS platform')
+    .setTitle('SH Marketing API')
+    .setDescription('Backend API for the SH Marketing platform')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

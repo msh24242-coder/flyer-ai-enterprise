@@ -210,7 +210,7 @@ export default function CompanyPage() {
             <EmptyState
               icon={Users}
               title="No team members"
-              description="Invite your team to collaborate in the AI Marketing OS."
+              description="Invite your team to collaborate in SH Marketing."
             />
           ) : (
             <div className="space-y-2">

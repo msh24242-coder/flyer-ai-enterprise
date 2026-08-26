@@ -1,4 +1,4 @@
-# AI Marketing OS
+# SH Marketing
 
 Intelligent multi-agent marketing operations platform built on an extensible AI provider abstraction.
 

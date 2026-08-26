@@ -1,6 +1,6 @@
-# Contributing to Flyer AI Enterprise
+# Contributing to SH Marketing
 
-Thank you for considering contributing to Flyer AI Enterprise! This document provides guidelines and instructions for contributing.
+Thank you for considering contributing to SH Marketing! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -306,7 +306,7 @@ npx prisma migrate dev --name migration_name
 
 ## Thank You
 
-Thank you for contributing to Flyer AI Enterprise! Your efforts help make this project better for everyone.
+Thank you for contributing to SH Marketing! Your efforts help make this project better for everyone.
 
 ---
 

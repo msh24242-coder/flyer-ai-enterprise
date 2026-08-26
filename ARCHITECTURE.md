@@ -1,4 +1,4 @@
-# AI Marketing OS — Architecture
+# SH Marketing — Architecture
 
 **Version**: 2.0  
 **Status**: Design (awaiting approval)  
@@ -8,7 +8,7 @@
 
 ## 1. Product Vision
 
-AI Marketing OS is a multi-tenant SaaS platform where a company's marketing work is driven by a team of specialized AI agents. Each agent is built on a shared, provider-agnostic Agent Engine — so the infrastructure that powers the Marketing Director Agent also powers every future agent (Strategy, Research, Content, Social, Performance, Analytics, Creative). Agents propose actions, the Approval Engine controls what they can execute autonomously, and humans stay in control of sensitive decisions.
+SH Marketing is a multi-tenant SaaS platform where a company's marketing work is driven by a team of specialized AI agents. Each agent is built on a shared, provider-agnostic Agent Engine — so the infrastructure that powers the Marketing Director Agent also powers every future agent (Strategy, Research, Content, Social, Performance, Analytics, Creative). Agents propose actions, the Approval Engine controls what they can execute autonomously, and humans stay in control of sensitive decisions.
 
 **First milestone**: Marketing Director Agent, end-to-end, with real data.
 
@@ -602,7 +602,7 @@ function calculateCost(usage: TokenUsage, model: string): number {
 ## 12. Repository Structure
 
 ```
-ai-marketing-os/
+sh-marketing/
 ├── backend/
 │   ├── src/
 │   │   ├── main.ts
