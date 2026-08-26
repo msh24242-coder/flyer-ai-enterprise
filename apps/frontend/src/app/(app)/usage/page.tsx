@@ -4,29 +4,23 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { BarChart3, Zap, DollarSign, TrendingUp } from 'lucide-react';
 
 type AgentUsage = { agentType: string; executions: number; totalCostUsd: number; totalTokens: number };
 type UsageData = {
-  totalExecutions: number;
-  totalCostUsd: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  byAgent: AgentUsage[];
-  fromDate: string; // ISO date string
-  toDate: string;   // ISO date string
+  totalExecutions: number; totalCostUsd: number;
+  totalInputTokens: number; totalOutputTokens: number;
+  byAgent: AgentUsage[]; fromDate: string; toDate: string;
 };
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
-    </Card>
-  );
-}
+const AGENT_COLORS: Record<string, string> = {
+  DIRECTOR: 'var(--brand-600)', STRATEGY: '#8b5cf6', RESEARCH: '#06b6d4',
+  CONTENT: '#f59e0b', SOCIAL: '#10b981', PERFORMANCE: '#ef4444',
+  ANALYTICS: '#6366f1', CREATIVE: '#ec4899',
+};
 
 export default function UsagePage() {
   const { user, accessToken } = useAuth();
@@ -42,78 +36,103 @@ export default function UsagePage() {
       .finally(() => setLoading(false));
   }, [user, accessToken]);
 
+  const stats = usage ? [
+    { label: 'Total Executions', value: usage.totalExecutions.toLocaleString(), icon: Zap, iconBg: 'var(--info-bg)', iconColor: 'var(--info-text)' },
+    { label: 'Total Cost', value: `$${Number(usage.totalCostUsd).toFixed(4)}`, icon: DollarSign, iconBg: 'var(--success-bg)', iconColor: 'var(--success-text)', sub: 'USD' },
+    { label: 'Input Tokens', value: Number(usage.totalInputTokens).toLocaleString(), icon: TrendingUp, iconBg: 'var(--warning-bg)', iconColor: 'var(--warning-text)' },
+    { label: 'Output Tokens', value: Number(usage.totalOutputTokens).toLocaleString(), icon: BarChart3, iconBg: 'var(--bg-muted)', iconColor: 'var(--text-secondary)' },
+  ] : [];
+
+  const maxExec = usage ? Math.max(...usage.byAgent.map((a) => a.executions), 1) : 1;
+
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
       <Header title="AI Usage" />
+      <PageHeader title="AI Usage" description="Agent execution metrics and cost analysis" />
 
-      <div className="flex-1 p-6">
-        <p className="mb-6 text-sm text-gray-500">
-          AI agent usage and cost for the last 30 days.
-        </p>
-
+      <div className="flex-1 p-6 space-y-6">
         {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="rounded-xl border px-4 py-3 text-sm animate-fade-in"
+            style={{ background: 'var(--error-bg)', borderColor: 'var(--error-border)', color: 'var(--error-text)' }}>
+            {error}
+          </div>
         )}
 
         {loading ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
             </div>
-            <Skeleton className="h-48 w-full rounded-xl" />
+            <Skeleton className="h-48 w-full" />
           </div>
         ) : !usage ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-4xl">📊</p>
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">No usage data</h3>
-            <p className="mt-2 text-sm text-gray-500">Start using the AI Director to see usage metrics here.</p>
-          </div>
+          <EmptyState
+            icon={BarChart3}
+            title="No usage data"
+            description="Start using the AI Director to see execution metrics and cost analysis."
+          />
         ) : (
           <div className="space-y-6">
-            {/* Summary stats */}
+            {/* Date range */}
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              Data from {new Date(usage.fromDate).toLocaleDateString()} to {new Date(usage.toDate).toLocaleDateString()}
+            </p>
+
+            {/* Stats grid */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatCard
-                label="Total Executions"
-                value={usage.totalExecutions.toLocaleString()}
-                sub={`${new Date(usage.fromDate).toLocaleDateString()} – ${new Date(usage.toDate).toLocaleDateString()}`}
-              />
-              <StatCard
-                label="Total Cost"
-                value={`$${Number(usage.totalCostUsd).toFixed(4)}`}
-                sub="USD"
-              />
-              <StatCard
-                label="Input Tokens"
-                value={Number(usage.totalInputTokens).toLocaleString()}
-              />
-              <StatCard
-                label="Output Tokens"
-                value={Number(usage.totalOutputTokens).toLocaleString()}
-              />
+              {stats.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <div key={stat.label}
+                    className="rounded-xl border p-5"
+                    style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)', boxShadow: 'var(--shadow-xs)' }}
+                  >
+                    <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: stat.iconBg }}>
+                      <Icon size={16} style={{ color: stat.iconColor }} />
+                    </div>
+                    <p className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{stat.value}</p>
+                    <p className="mt-0.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>{stat.label}</p>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Per-agent breakdown */}
             {usage.byAgent.length > 0 && (
-              <div>
-                <h3 className="mb-3 text-sm font-semibold text-gray-700">By Agent</h3>
-                <Card className="divide-y divide-gray-100">
+              <div className="rounded-xl border" style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)', boxShadow: 'var(--shadow-xs)' }}>
+                <div className="border-b px-5 py-4" style={{ borderColor: 'var(--surface-border)' }}>
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Usage by Agent</h3>
+                </div>
+                <div className="divide-y" style={{ borderColor: 'var(--surface-border)' }}>
                   {usage.byAgent.map((agent) => (
-                    <div key={agent.agentType} className="flex items-center justify-between px-4 py-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{agent.agentType}</p>
-                        <p className="text-xs text-gray-400">{agent.executions} executions</p>
+                    <div key={agent.agentType} className="px-5 py-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                            style={{ background: AGENT_COLORS[agent.agentType] ?? 'var(--text-tertiary)' }} />
+                          <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{agent.agentType}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                            ${Number(agent.totalCostUsd).toFixed(4)}
+                          </p>
+                          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                            {agent.executions} exec · {Number(agent.totalTokens).toLocaleString()} tokens
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900">
-                          ${Number(agent.totalCostUsd).toFixed(4)}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {Number(agent.totalTokens).toLocaleString()} tokens
-                        </p>
+                      <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: 'var(--surface-border)' }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${(agent.executions / maxExec) * 100}%`,
+                            background: AGENT_COLORS[agent.agentType] ?? 'var(--brand-600)',
+                          }}
+                        />
                       </div>
                     </div>
                   ))}
-                </Card>
+                </div>
               </div>
             )}
           </div>

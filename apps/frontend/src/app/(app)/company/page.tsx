@@ -4,10 +4,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { Badge } from '@/components/ui/badge';
+import { Building2, Users, Check, Globe, Briefcase, UserX } from 'lucide-react';
+import type { BadgeVariant } from '@/components/ui/badge';
 
 type CompanyData = {
   id: string;
@@ -28,6 +32,30 @@ type Member = {
 
 const ROLES = ['MEMBER', 'ADMIN', 'OWNER'] as const;
 
+function roleBadgeVariant(role: string): BadgeVariant {
+  const map: Record<string, BadgeVariant> = { OWNER: 'warning', ADMIN: 'info', MEMBER: 'default' };
+  return map[role] ?? 'default';
+}
+
+function Section({ icon: Icon, title, description, children }: {
+  icon: React.ElementType; title: string; description: string; children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border" style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}>
+      <div className="flex items-start gap-4 border-b px-6 py-5" style={{ borderColor: 'var(--surface-border)' }}>
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'var(--info-bg)' }}>
+          <Icon size={16} style={{ color: 'var(--info-text)' }} />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
+          <p className="mt-0.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>{description}</p>
+        </div>
+      </div>
+      <div className="px-6 py-5">{children}</div>
+    </section>
+  );
+}
+
 export default function CompanyPage() {
   const { user, accessToken } = useAuth();
   const companyId = user?.companyId ?? '';
@@ -38,14 +66,12 @@ export default function CompanyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Profile form state
   const [name, setName] = useState('');
   const [industry, setIndustry] = useState('');
   const [website, setWebsite] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(false);
 
-  // Role change state
   const [roleChanging, setRoleChanging] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
@@ -116,120 +142,145 @@ export default function CompanyPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col h-full">
-        <Header title="Company" />
-        <div className="flex-1 p-6 space-y-4">
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full">
       <Header title="Company" />
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <PageHeader title="Company" description="Manage your organization profile and team members" />
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-5 max-w-2xl">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+          <div className="rounded-xl border px-4 py-3 text-sm animate-fade-in"
+            style={{ background: 'var(--error-bg)', borderColor: 'var(--error-border)', color: 'var(--error-text)' }}>
             {error}
           </div>
         )}
 
         {/* Company Profile */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Company Profile</h2>
-          <form onSubmit={(e) => void handleSaveProfile(e)} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Company Name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Corp" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Industry</label>
-              <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. SaaS, E-commerce, Healthcare" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Website</label>
-              <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://example.com" type="url" />
-            </div>
-            <div className="flex items-center gap-3">
-              <Button type="submit" disabled={savingProfile}>
+        <Section icon={Building2} title="Company Profile" description="Your organization's name, industry, and web presence">
+          {loading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <form onSubmit={(e) => void handleSaveProfile(e)} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Company Name</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Corp" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    <span className="flex items-center gap-1"><Briefcase size={11} /> Industry</span>
+                  </label>
+                  <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. SaaS, E-commerce" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    <span className="flex items-center gap-1"><Globe size={11} /> Website</span>
+                  </label>
+                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://example.com" type="url" />
+                </div>
+              </div>
+
+              {company && (
+                <div className="rounded-lg px-3 py-2.5 text-xs font-mono" style={{ background: 'var(--bg-muted)', color: 'var(--text-tertiary)' }}>
+                  ID: {company.id.slice(0, 16)}… · Slug: {company.slug}
+                </div>
+              )}
+
+              {profileSuccess && (
+                <div className="flex items-center gap-2 rounded-lg border px-4 py-3 text-sm"
+                  style={{ background: 'var(--success-bg)', borderColor: 'var(--success-border)', color: 'var(--success-text)' }}>
+                  <Check size={14} /> Profile saved successfully
+                </div>
+              )}
+
+              <Button type="submit" loading={savingProfile} size="sm">
                 {savingProfile ? 'Saving…' : 'Save Profile'}
               </Button>
-              {profileSuccess && (
-                <span className="text-sm text-green-600">Saved!</span>
-              )}
-            </div>
-            {company && (
-              <p className="text-xs text-muted-foreground">Company ID: {company.id} · Slug: {company.slug}</p>
-            )}
-          </form>
-        </Card>
+            </form>
+          )}
+        </Section>
 
         {/* Team Members */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Team Members</h2>
-          {members.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No members found.</p>
+        <Section icon={Users} title="Team Members" description="Manage roles and access for your organization">
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+            </div>
+          ) : members.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="No team members"
+              description="Invite your team to collaborate in the AI Marketing OS."
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 pr-4 font-medium">Name</th>
-                    <th className="text-left py-2 pr-4 font-medium">Email</th>
-                    <th className="text-left py-2 pr-4 font-medium">Role</th>
-                    <th className="text-left py-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((member) => (
-                    <tr key={member.id} className="border-b last:border-0">
-                      <td className="py-3 pr-4">
+            <div className="space-y-2">
+              {members.map((member) => (
+                <div
+                  key={member.id}
+                  className="group flex items-center gap-4 rounded-xl border px-4 py-3"
+                  style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)' }}
+                >
+                  {/* Avatar */}
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                    style={{ background: 'var(--info-bg)', color: 'var(--info-text)' }}>
+                    {member.firstName[0]}{member.lastName[0]}
+                  </div>
+
+                  {/* Name + email */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                         {member.firstName} {member.lastName}
-                        {member.id === user?.id && (
-                          <span className="ml-2 text-xs bg-blue-100 text-blue-700 rounded px-1">You</span>
-                        )}
-                      </td>
-                      <td className="py-3 pr-4 text-muted-foreground">{member.email}</td>
-                      <td className="py-3 pr-4">
-                        {member.id === user?.id ? (
-                          <span className="text-muted-foreground">{member.role}</span>
-                        ) : (
-                          <select
-                            value={member.role}
-                            onChange={(e) => void handleRoleChange(member.id, e.target.value)}
-                            disabled={roleChanging === member.id || member.role === 'OWNER'}
-                            className="border rounded px-2 py-1 text-sm bg-background disabled:opacity-50"
-                          >
-                            {ROLES.map((r) => (
-                              <option key={r} value={r} disabled={r === 'OWNER'}>{r}</option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      <td className="py-3">
-                        {member.id !== user?.id && member.role !== 'OWNER' && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => void handleRemove(member.id)}
-                            disabled={removing === member.id}
-                            className="text-red-600 border-red-200 hover:bg-red-50"
-                          >
-                            {removing === member.id ? 'Removing…' : 'Remove'}
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </p>
+                      {member.id === user?.id && (
+                        <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ background: 'var(--brand-600)', color: '#fff' }}>
+                          You
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>{member.email}</p>
+                  </div>
+
+                  {/* Role */}
+                  <div className="flex-shrink-0">
+                    {member.id === user?.id || member.role === 'OWNER' ? (
+                      <Badge variant={roleBadgeVariant(member.role)}>{member.role}</Badge>
+                    ) : (
+                      <select
+                        value={member.role}
+                        onChange={(e) => void handleRoleChange(member.id, e.target.value)}
+                        disabled={roleChanging === member.id}
+                        className="rounded-lg border px-2 py-1 text-xs font-medium disabled:opacity-50"
+                        style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)', color: 'var(--text-primary)' }}
+                      >
+                        {ROLES.filter((r) => r !== 'OWNER').map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Remove */}
+                  {member.id !== user?.id && member.role !== 'OWNER' && (
+                    <button
+                      onClick={() => void handleRemove(member.id)}
+                      disabled={removing === member.id}
+                      className="flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      style={{ color: 'var(--error-text)' }}
+                      title="Remove member"
+                    >
+                      {removing === member.id
+                        ? <span className="text-xs">…</span>
+                        : <UserX size={13} />
+                      }
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           )}
-        </Card>
+        </Section>
       </div>
     </div>
   );

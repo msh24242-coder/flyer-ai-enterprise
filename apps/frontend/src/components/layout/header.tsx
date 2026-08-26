@@ -2,56 +2,86 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/context/auth';
+import { LogOut, ChevronDown, User } from 'lucide-react';
 
 export function Header({ title }: { title?: string }) {
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const initials = user
-    ? `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase()
+    ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase()
     : '?';
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
-      <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+    <header className="flex h-14 flex-shrink-0 items-center justify-between border-b px-6"
+      style={{ borderColor: 'var(--surface-border)', background: 'var(--surface-1)' }}
+    >
+      {title && (
+        <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {title}
+        </h1>
+      )}
 
-      <div className="relative">
+      <div className="ml-auto relative">
         <button
           onClick={() => setMenuOpen((o) => !o)}
-          className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-gray-100 focus:outline-none"
+          className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--bg-muted)] focus:outline-none"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-xs font-semibold text-white shadow-sm">
             {initials}
           </span>
-          <span className="hidden text-gray-700 sm:block">
+          <span className="hidden text-sm font-medium sm:block" style={{ color: 'var(--text-primary)' }}>
             {user ? `${user.firstName} ${user.lastName}` : 'Account'}
           </span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-gray-400">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+          <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
         </button>
 
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+            <div
+              className="absolute right-0 z-20 mt-2 w-56 rounded-xl border py-1 shadow-xl animate-fade-in"
+              style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
+            >
               {user && (
-                <div className="border-b border-gray-100 px-4 py-2.5">
-                  <p className="text-sm font-medium text-gray-900">{user.firstName} {user.lastName}</p>
-                  <p className="truncate text-xs text-gray-500">{user.email}</p>
+                <div className="border-b px-4 py-3" style={{ borderColor: 'var(--surface-border)' }}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-sm font-semibold text-white">
+                      {initials}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {user.firstName} {user.lastName}
+                      </p>
+                      <p className="truncate text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                        {user.email}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
-              <button
-                onClick={() => { setMenuOpen(false); logout(); }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-                  <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-                Sign out
-              </button>
+              <div className="py-1">
+                <button
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm transition-colors"
+                  style={{ color: 'var(--text-secondary)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-muted)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    window.location.href = '/settings';
+                  }}
+                >
+                  <User size={14} />
+                  Profile & Settings
+                </button>
+                <button
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 transition-colors hover:bg-red-50"
+                  onClick={() => { setMenuOpen(false); logout(); }}
+                >
+                  <LogOut size={14} />
+                  Sign out
+                </button>
+              </div>
             </div>
           </>
         )}

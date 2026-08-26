@@ -4,20 +4,29 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { CheckSquare, Trash2, Calendar, ChevronDown } from 'lucide-react';
+import type { BadgeVariant } from '@/components/ui/badge';
 
 type Task = { id: string; title: string; status: string; priority: string; dueDate?: string; description?: string };
 
 const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'];
+const FILTERS = ['all', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'];
 
-function statusVariant(status: string): 'default' | 'success' | 'warning' | 'error' | 'info' {
-  const map: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
+function statusVariant(status: string): BadgeVariant {
+  const map: Record<string, BadgeVariant> = {
     TODO: 'default', IN_PROGRESS: 'info', DONE: 'success', BLOCKED: 'error', CANCELLED: 'default',
     HIGH: 'error', MEDIUM: 'warning', LOW: 'default',
   };
   return map[status] ?? 'default';
+}
+
+function priorityDot(priority: string) {
+  const colors: Record<string, string> = { HIGH: '#ef4444', MEDIUM: '#f59e0b', LOW: '#94a3b8' };
+  return <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: colors[priority] ?? '#94a3b8' }} />;
 }
 
 export default function TasksPage() {
@@ -25,7 +34,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>('all');
+  const [filter, setFilter] = useState('all');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -68,84 +77,94 @@ export default function TasksPage() {
   const filtered = filter === 'all' ? tasks : tasks.filter((t) => t.status === filter);
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
       <Header title="Tasks" />
+      <PageHeader title="Tasks" description="Track and manage your marketing task queue" />
 
-      <div className="flex-1 p-6">
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto">
-          {['all', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'].map((s) => (
+      <div className="flex-1 p-6 space-y-4">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {FILTERS.map((s) => (
             <button
               key={s}
               onClick={() => setFilter(s)}
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150"
+              style={
                 filter === s
-                  ? 'bg-blue-600 text-white'
-                  : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-              }`}
+                  ? { background: 'var(--brand-600)', color: '#fff', border: '1px solid transparent' }
+                  : { background: 'var(--surface-1)', color: 'var(--text-secondary)', border: '1px solid var(--surface-border)' }
+              }
             >
               {s === 'all' ? 'All' : s.replace('_', ' ')}
             </button>
           ))}
+          <span className="text-xs ml-auto" style={{ color: 'var(--text-tertiary)' }}>
+            {filtered.length} task{filtered.length !== 1 ? 's' : ''}
+          </span>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="rounded-xl border px-4 py-3 text-sm animate-fade-in"
+            style={{ background: 'var(--error-bg)', borderColor: 'var(--error-border)', color: 'var(--error-text)' }}>
+            {error}
+          </div>
         )}
 
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-4xl">✅</p>
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">
-              {filter === 'all' ? 'No tasks yet' : `No ${filter.replace('_', ' ').toLowerCase()} tasks`}
-            </h3>
-            <p className="mt-2 text-sm text-gray-500">
-              {filter === 'all' ? 'The AI Director can create tasks for you.' : 'Try a different filter.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={CheckSquare}
+            title={filter === 'all' ? 'No tasks yet' : `No ${filter.replace('_', ' ').toLowerCase()} tasks`}
+            description={filter === 'all' ? 'The AI Director creates tasks automatically as part of campaigns.' : 'Try a different filter.'}
+          />
         ) : (
           <div className="space-y-2">
             {filtered.map((task) => (
-              <Card key={task.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className={`truncate font-medium ${task.status === 'DONE' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                      {task.title}
+              <div
+                key={task.id}
+                className="group flex items-center gap-3 rounded-xl border px-4 py-3.5 transition-all duration-150 hover:shadow-sm"
+                style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
+              >
+                {priorityDot(task.priority)}
+                <div className="flex-1 min-w-0">
+                  <p
+                    className="truncate text-sm font-medium"
+                    style={{ color: task.status === 'DONE' ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: task.status === 'DONE' ? 'line-through' : 'none' }}
+                  >
+                    {task.title}
+                  </p>
+                  {task.dueDate && (
+                    <p className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      <Calendar size={10} /> Due {new Date(task.dueDate).toLocaleDateString()}
                     </p>
-                    {task.description && (
-                      <p className="mt-0.5 line-clamp-1 text-sm text-gray-500">{task.description}</p>
-                    )}
-                    {task.dueDate && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        Due: {new Date(task.dueDate).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant={statusVariant(task.priority)} className="text-[10px]">{task.priority}</Badge>
+                  )}
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <Badge variant={statusVariant(task.priority)}>{task.priority}</Badge>
+                  <div className="relative">
                     <select
                       value={task.status}
                       onChange={(e) => void handleStatusChange(task.id, e.target.value)}
                       disabled={updatingId === task.id}
-                      className="rounded-lg border border-gray-200 bg-background px-2 py-1 text-xs disabled:opacity-50"
+                      className="appearance-none rounded-lg border pl-2 pr-6 py-1 text-xs cursor-pointer disabled:opacity-50"
+                      style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)', color: 'var(--text-secondary)' }}
                     >
-                      {TASK_STATUSES.map((s) => (
-                        <option key={s} value={s}>{s.replace('_', ' ')}</option>
-                      ))}
+                      {TASK_STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                     </select>
-                    <button
-                      onClick={() => void handleDelete(task.id)}
-                      disabled={deletingId === task.id}
-                      className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
-                    >
-                      {deletingId === task.id ? '…' : '×'}
-                    </button>
+                    <ChevronDown size={10} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
                   </div>
+                  <button
+                    onClick={() => void handleDelete(task.id)}
+                    disabled={deletingId === task.id}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                    title="Delete task"
+                  >
+                    {deletingId === task.id ? <span className="text-xs">…</span> : <Trash2 size={13} />}
+                  </button>
                 </div>
-              </Card>
+              </div>
             ))}
           </div>
         )}

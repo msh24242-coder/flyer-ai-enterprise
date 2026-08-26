@@ -4,21 +4,87 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { Target, Trash2, Plus, ChevronDown } from 'lucide-react';
+import type { BadgeVariant } from '@/components/ui/badge';
 
 type Goal = { id: string; title: string; status: string; description?: string; targetDate?: string };
 
 const STATUS_OPTIONS = ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 
-function statusVariant(status: string): 'default' | 'success' | 'warning' | 'error' | 'info' {
-  const map: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
+function statusVariant(status: string): BadgeVariant {
+  const map: Record<string, BadgeVariant> = {
     ACTIVE: 'success', COMPLETED: 'info', CANCELLED: 'error', DRAFT: 'default',
   };
   return map[status] ?? 'default';
+}
+
+function GoalRow({
+  goal,
+  onStatusChange,
+  onDelete,
+  updating,
+  deleting,
+}: {
+  goal: Goal;
+  onStatusChange: (id: string, status: string) => void;
+  onDelete: (id: string) => void;
+  updating: boolean;
+  deleting: boolean;
+}) {
+  return (
+    <div
+      className="group flex items-start gap-4 rounded-xl border p-5 transition-all duration-150 hover:shadow-sm"
+      style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
+    >
+      <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: 'var(--info-bg)' }}>
+        <Target size={16} style={{ color: 'var(--info-text)' }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{goal.title}</p>
+        {goal.description && (
+          <p className="mt-0.5 text-sm line-clamp-2" style={{ color: 'var(--text-tertiary)' }}>{goal.description}</p>
+        )}
+        {goal.targetDate && (
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+            Target: {new Date(goal.targetDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+          </p>
+        )}
+      </div>
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <Badge variant={statusVariant(goal.status)}>{goal.status}</Badge>
+        <div className="relative">
+          <select
+            value={goal.status}
+            onChange={(e) => onStatusChange(goal.id, e.target.value)}
+            disabled={updating}
+            className="appearance-none rounded-lg border pl-2 pr-6 py-1 text-xs cursor-pointer disabled:opacity-50"
+            style={{
+              background: 'var(--surface-2)',
+              borderColor: 'var(--surface-border)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <ChevronDown size={10} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
+        </div>
+        <button
+          onClick={() => onDelete(goal.id)}
+          disabled={deleting}
+          className="flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 text-red-400 hover:text-red-600 disabled:opacity-50"
+          title="Delete goal"
+        >
+          {deleting ? <span className="text-xs">…</span> : <Trash2 size={13} />}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function GoalsPage() {
@@ -26,7 +92,6 @@ export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -78,7 +143,7 @@ export default function GoalsPage() {
       const updated = await api.goals.update(companyId, token, goalId, { status });
       setGoals((prev) => prev.map((g) => g.id === goalId ? { ...g, status: updated.status } : g));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update goal');
+      setError(err instanceof Error ? err.message : 'Failed to update');
     } finally {
       setUpdatingStatusId(null);
     }
@@ -91,88 +156,70 @@ export default function GoalsPage() {
       await api.goals.delete(companyId, token, goalId);
       setGoals((prev) => prev.filter((g) => g.id !== goalId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete goal');
+      setError(err instanceof Error ? err.message : 'Failed to delete');
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
       <Header title="Goals" />
+      <PageHeader
+        title="Marketing Goals"
+        description="Track your objectives and key results"
+        actions={
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus size={14} /> New Goal
+          </Button>
+        }
+      />
 
-      <div className="flex-1 p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <p className="text-sm text-gray-500">Track your marketing objectives and key results.</p>
-          <Button onClick={() => setCreating(true)} size="sm">+ New Goal</Button>
-        </div>
-
+      <div className="flex-1 p-6 space-y-4">
         {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="rounded-xl border px-4 py-3 text-sm animate-fade-in"
+            style={{ background: 'var(--error-bg)', borderColor: 'var(--error-border)', color: 'var(--error-text)' }}>
+            {error}
+          </div>
         )}
 
         {creating && (
-          <Card className="mb-6 p-4">
-            <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4">
-              <h3 className="text-sm font-semibold text-gray-900">New Goal</h3>
+          <div className="rounded-xl border p-5 animate-fade-in"
+            style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
+            <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>New Goal</h3>
               <Input label="Title" required value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g. Grow MQL pipeline by 30% in Q4" />
               <Input label="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="What does success look like?" />
               <div className="flex gap-2">
-                <Button type="submit" disabled={saving} size="sm">{saving ? 'Creating…' : 'Create'}</Button>
+                <Button type="submit" loading={saving} size="sm">{saving ? 'Creating…' : 'Create Goal'}</Button>
                 <Button variant="secondary" size="sm" onClick={() => { setCreating(false); setNewTitle(''); setNewDesc(''); }}>Cancel</Button>
               </div>
             </form>
-          </Card>
+          </div>
         )}
 
         {loading ? (
           <div className="space-y-3">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
           </div>
         ) : goals.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-4xl">🎯</p>
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">No goals yet</h3>
-            <p className="mt-2 text-sm text-gray-500">Ask the AI Director to create goals, or use the button above.</p>
-          </div>
+          <EmptyState
+            icon={Target}
+            title="No goals yet"
+            description="Ask the AI Director to create goals based on your strategy, or create one manually."
+            action={<Button size="sm" onClick={() => setCreating(true)}><Plus size={14} /> New Goal</Button>}
+          />
         ) : (
           <div className="space-y-3">
             {goals.map((goal) => (
-              <Card key={goal.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium text-gray-900">{goal.title}</p>
-                    {goal.description && (
-                      <p className="mt-0.5 text-sm text-gray-500 line-clamp-2">{goal.description}</p>
-                    )}
-                    {goal.targetDate && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        Target: {new Date(goal.targetDate).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <select
-                      value={goal.status}
-                      onChange={(e) => void handleStatusChange(goal.id, e.target.value)}
-                      disabled={updatingStatusId === goal.id}
-                      className="rounded-lg border border-gray-200 bg-background px-2 py-1 text-xs disabled:opacity-50"
-                    >
-                      {STATUS_OPTIONS.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                    <Badge variant={statusVariant(goal.status)}>{goal.status}</Badge>
-                    <button
-                      onClick={() => void handleDelete(goal.id)}
-                      disabled={deletingId === goal.id}
-                      className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
-                    >
-                      {deletingId === goal.id ? '…' : 'Delete'}
-                    </button>
-                  </div>
-                </div>
-              </Card>
+              <GoalRow
+                key={goal.id}
+                goal={goal}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDelete}
+                updating={updatingStatusId === goal.id}
+                deleting={deletingId === goal.id}
+              />
             ))}
           </div>
         )}

@@ -3,10 +3,16 @@ import { twMerge } from 'tailwind-merge';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {}
 
-export function Card({ className, children, ...props }: CardProps) {
+export function Card({ className, style, children, ...props }: CardProps) {
   return (
     <div
-      className={twMerge('rounded-xl border border-gray-200 bg-white p-6 shadow-sm', className)}
+      className={twMerge('rounded-xl border p-6', className)}
+      style={{
+        background: 'var(--surface-1)',
+        borderColor: 'var(--surface-border)',
+        boxShadow: 'var(--shadow-xs)',
+        ...style,
+      }}
       {...props}
     >
       {children}
@@ -22,9 +28,13 @@ export function CardHeader({ className, children, ...props }: CardProps) {
   );
 }
 
-export function CardTitle({ className, children, ...props }: CardProps) {
+export function CardTitle({ className, style, children, ...props }: CardProps) {
   return (
-    <h3 className={twMerge('text-base font-semibold text-gray-900', className)} {...props}>
+    <h3
+      className={twMerge('text-base font-semibold', className)}
+      style={{ color: 'var(--text-primary)', ...style }}
+      {...props}
+    >
       {children}
     </h3>
   );
