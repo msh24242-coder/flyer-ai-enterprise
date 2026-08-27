@@ -217,6 +217,20 @@ describe('MarketingDirectorAgent', () => {
     expect(result.traceResult.finalStatus).toBe('COMPLETED');
   });
 
+  it('executeStream sets ctx before defineTools() runs (regression: this crashed with "Cannot read properties of null" until the executeStream override was added)', async () => {
+    mockAI.stream.mockImplementation(async (_req, onEvent) => {
+      onEvent({ type: 'text_delta', delta: 'Streamed response' });
+      return makeEndTurnResponse('Streamed response');
+    });
+    mockApproval.check.mockResolvedValue({ outcome: 'ALLOWED', reason: 'WRITE allowed' });
+
+    const events: Array<{ type: string }> = [];
+    const result = await agent.executeStream(makeContext(), (e) => events.push(e));
+
+    expect(result.response).toBe('Streamed response');
+    expect(events[0]).toMatchObject({ type: 'agent_start', agentType: 'DIRECTOR' });
+  });
+
   // ── Tool call flow ────────────────────────────────────────────────────────
 
   it('executes get_company_knowledge tool and returns result', async () => {

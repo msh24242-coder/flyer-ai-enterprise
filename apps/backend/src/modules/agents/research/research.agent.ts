@@ -7,6 +7,7 @@ import {
   AgentExecutionContext,
   AgentExecutionResult,
   AgentIdentity,
+  AgentStreamEventType,
 } from '../../agent-engine/base/agent-engine.types';
 import { IAIProvider } from '../../agent-engine/providers/ai/ai-provider.interface';
 import { IEmbeddingProvider } from '../../agent-engine/providers/embedding/embedding-provider.interface';
@@ -37,6 +38,14 @@ export class ResearchAgent extends AgentEngine {
   override async execute(context: AgentExecutionContext): Promise<AgentExecutionResult> {
     this.ctx = context;
     return super.execute(context);
+  }
+
+  override async executeStream(
+    context: AgentExecutionContext,
+    onEvent: (event: AgentStreamEventType) => void,
+  ): Promise<AgentExecutionResult> {
+    this.ctx = context;
+    return super.executeStream(context, onEvent);
   }
 
   getIdentity(): AgentIdentity {

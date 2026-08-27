@@ -2,7 +2,7 @@ import { Injectable, Inject, Scope } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AgentType, PermissionLevel, MemoryType } from '@prisma/client';
 import { AgentEngine } from '../agent-engine/base/agent-engine.abstract';
-import { AgentToolDefinition, AgentExecutionContext, AgentIdentity, AgentExecutionResult } from '../agent-engine/base/agent-engine.types';
+import { AgentToolDefinition, AgentExecutionContext, AgentIdentity, AgentExecutionResult, AgentStreamEventType } from '../agent-engine/base/agent-engine.types';
 import { IAIProvider } from '../agent-engine/providers/ai/ai-provider.interface';
 import { IEmbeddingProvider } from '../agent-engine/providers/embedding/embedding-provider.interface';
 import { MemoryService } from '../agent-engine/memory/memory.service';
@@ -48,6 +48,17 @@ export class MarketingDirectorAgent extends AgentEngine {
   override async execute(context: AgentExecutionContext): Promise<AgentExecutionResult> {
     this.ctx = context;
     return super.execute(context);
+  }
+
+  // Same as execute() above — executeStream() also calls defineTools() internally,
+  // and was missing this override entirely (only reachable once run/stream became a
+  // real callable POST route; ctx was always null on this path before that).
+  override async executeStream(
+    context: AgentExecutionContext,
+    onEvent: (event: AgentStreamEventType) => void,
+  ): Promise<AgentExecutionResult> {
+    this.ctx = context;
+    return super.executeStream(context, onEvent);
   }
 
   getIdentity(): AgentIdentity {
