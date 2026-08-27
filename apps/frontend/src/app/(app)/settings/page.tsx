@@ -136,8 +136,9 @@ export default function SettingsPage() {
           ) : (
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Default Model</label>
+                <label htmlFor="default-model" className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Default Model</label>
                 <select
+                  id="default-model"
                   value={aiConfig.defaultModel ?? 'claude-opus-5'}
                   onChange={(e) => setAiConfig((c) => ({ ...c, defaultModel: e.target.value }))}
                   className="w-full rounded-lg border px-3 py-2 text-sm"

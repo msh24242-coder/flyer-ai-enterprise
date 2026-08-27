@@ -510,6 +510,7 @@ export default function ChatPage() {
             </span>
             <button
               onClick={newConversation}
+              aria-label="New conversation"
               className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-muted)]"
               title="New conversation"
             >
@@ -524,6 +525,7 @@ export default function ChatPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search conversations"
+                aria-label="Search conversations"
                 className="w-full bg-transparent text-xs outline-none"
                 style={{ color: 'var(--text-primary)' }}
               />
@@ -581,6 +583,7 @@ export default function ChatPage() {
             onClick={() => setSidebarOpen((v) => !v)}
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-muted)]"
             title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            aria-label={sidebarOpen ? 'Hide conversation list' : 'Show conversation list'}
           >
             {sidebarOpen ? <ChevronLeft size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronRight size={16} style={{ color: 'var(--text-secondary)' }} />}
           </button>
