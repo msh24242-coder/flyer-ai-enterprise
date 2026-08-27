@@ -48,7 +48,7 @@ describe('AssetsStorageService', () => {
       });
 
       expect(result.filename).toMatch(/^[0-9a-f-]{36}\.png$/);
-      expect(result.publicUrl).toBe(`http://backend.test/uploads/company-abc/${result.filename}`);
+      expect(result.publicUrl).toBe(`http://backend.test/api/v1/uploads/company-abc/${result.filename}`);
       const written = await fs.readFile(path.join(tmpDir, 'company-abc', result.filename), 'utf8');
       expect(written).toBe('fake-image-bytes');
     });

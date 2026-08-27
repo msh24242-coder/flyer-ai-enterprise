@@ -50,7 +50,9 @@ export class AssetsStorageService {
     return {
       filename,
       storagePath: diskPath,
-      publicUrl: `${this.backendUrl}/uploads/${folder}/${filename}`,
+      // UploadsController sits behind the app's global 'api/v1' prefix
+      // (set in main.ts) like every other controller — keep this in sync.
+      publicUrl: `${this.backendUrl}/api/v1/uploads/${folder}/${filename}`,
     };
   }
 

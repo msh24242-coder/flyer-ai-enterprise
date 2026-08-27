@@ -42,6 +42,7 @@ RUN npx prisma generate
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nestjs && \
+    mkdir -p /app/uploads && \
     chown -R nestjs:nodejs /app
 
 USER nestjs
