@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useMemo, KeyboardEvent } from 'react';
 import { useAuth } from '@/context/auth';
+import { useMobileNav } from '@/context/mobile-nav';
 import { api, friendlyMessage } from '@/lib/api';
 import {
-  BrainCircuit, Plus, Trash2, Send, ChevronLeft, ChevronRight,
+  BrainCircuit, Plus, Trash2, Send, ChevronLeft, ChevronRight, Menu,
   Sparkles, Target, Megaphone, BookOpen, Search, Pencil, Archive,
   Square, RotateCcw, Wrench, CheckCircle2, XCircle, Loader2, ShieldAlert, Check, X,
 } from 'lucide-react';
@@ -283,6 +284,7 @@ function ConvItem({
 
 export default function ChatPage() {
   const { user, accessToken } = useAuth();
+  const { toggle: toggleMobileNav } = useMobileNav();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -568,6 +570,13 @@ export default function ChatPage() {
           className="flex items-center gap-2 border-b px-4 py-2.5"
           style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
         >
+          <button
+            onClick={toggleMobileNav}
+            aria-label="Toggle navigation menu"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-muted)] md:hidden"
+          >
+            <Menu size={16} style={{ color: 'var(--text-secondary)' }} />
+          </button>
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-muted)]"

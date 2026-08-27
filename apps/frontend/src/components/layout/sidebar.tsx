@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useMobileNav } from '@/context/mobile-nav';
 
 interface NavItem {
   href: string;
@@ -91,6 +92,7 @@ function NavLink({
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { isOpen, close } = useMobileNav();
 
   function isActive(href: string) {
     if (href === '/dashboard') return pathname === '/dashboard';
@@ -98,13 +100,26 @@ export function Sidebar() {
   }
 
   return (
-    <aside
-      className="relative flex h-screen flex-shrink-0 flex-col border-r bg-[#0f1117] transition-all duration-200"
-      style={{
-        width: collapsed ? 64 : 240,
-        borderColor: '#1e2433',
-      }}
-    >
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={close}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={twMerge(
+          'fixed inset-y-0 left-0 z-40 flex h-screen flex-shrink-0 flex-col border-r bg-[#0f1117] transition-transform duration-200',
+          'md:relative md:translate-x-0',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+        style={{
+          width: collapsed ? 64 : 240,
+          borderColor: '#1e2433',
+        }}
+      >
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 px-4 border-b border-[#1e2433]">
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg">
@@ -119,7 +134,7 @@ export function Sidebar() {
       </div>
 
       {/* Main nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5" onClick={close}>
         {mainNav.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
         ))}
@@ -129,19 +144,20 @@ export function Sidebar() {
       <div className="mx-3 border-t border-[#1e2433]" />
 
       {/* Bottom nav */}
-      <div className="px-2 py-3 space-y-0.5">
+      <div className="px-2 py-3 space-y-0.5" onClick={close}>
         {bottomNav.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
         ))}
       </div>
 
-      {/* Collapse toggle */}
+      {/* Collapse toggle (desktop only) */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="absolute -right-3 top-20 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-[#2a3754] bg-[#141924] text-slate-400 shadow-sm hover:text-slate-100 transition-colors"
+        className="absolute -right-3 top-20 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-[#2a3754] bg-[#141924] text-slate-400 shadow-sm transition-colors hover:text-slate-100 md:flex"
       >
         {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
       </button>
-    </aside>
+      </aside>
+    </>
   );
 }

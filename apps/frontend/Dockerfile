@@ -19,6 +19,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY apps/frontend/package.json ./apps/frontend/
 COPY apps/frontend/tsconfig.json ./apps/frontend/
 COPY apps/frontend/next.config.ts ./apps/frontend/
+COPY apps/frontend/postcss.config.mjs ./apps/frontend/
 COPY apps/frontend/public ./apps/frontend/public
 COPY apps/frontend/src ./apps/frontend/src
 COPY packages/ ./packages/

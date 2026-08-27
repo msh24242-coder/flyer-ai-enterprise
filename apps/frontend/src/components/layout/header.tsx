@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/context/auth';
-import { LogOut, ChevronDown, User } from 'lucide-react';
+import { useMobileNav } from '@/context/mobile-nav';
+import { LogOut, ChevronDown, User, Menu } from 'lucide-react';
 
 export function Header({ title }: { title?: string }) {
   const { user, logout } = useAuth();
+  const { toggle } = useMobileNav();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const initials = user
@@ -13,11 +15,19 @@ export function Header({ title }: { title?: string }) {
     : '?';
 
   return (
-    <header className="flex h-14 flex-shrink-0 items-center justify-between border-b px-6"
+    <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b px-4 sm:px-6"
       style={{ borderColor: 'var(--surface-border)', background: 'var(--surface-1)' }}
     >
+      <button
+        onClick={toggle}
+        aria-label="Toggle navigation menu"
+        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-muted)] md:hidden"
+      >
+        <Menu size={18} style={{ color: 'var(--text-secondary)' }} />
+      </button>
+
       {title && (
-        <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+        <h1 className="text-base font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
           {title}
         </h1>
       )}

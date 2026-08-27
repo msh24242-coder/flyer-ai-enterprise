@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth';
+import { MobileNavProvider } from '@/context/mobile-nav';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Zap } from 'lucide-react';
 
@@ -37,11 +38,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-subtle)' }}>
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-        <main className="flex-1 overflow-y-auto">{children}</main>
+    <MobileNavProvider>
+      <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-subtle)' }}>
+        <Sidebar />
+        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+          <main className="flex-1 overflow-y-auto">{children}</main>
+        </div>
       </div>
-    </div>
+    </MobileNavProvider>
   );
 }
