@@ -3,6 +3,7 @@
 import { useState, useMemo, FormEvent } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { friendlyMessage } from '@/lib/api';
 import { slugify } from '@/lib/slug';
 import { Button } from '@/components/ui/button';
@@ -10,10 +11,11 @@ import { Input } from '@/components/ui/input';
 import { Zap, Check } from 'lucide-react';
 
 function PasswordStrength({ password }: { password: string }) {
+  const { t } = usePreferences();
   const checks = [
-    { label: '8+ characters', pass: password.length >= 8 },
-    { label: 'Uppercase letter', pass: /[A-Z]/.test(password) },
-    { label: 'Number or symbol', pass: /[\d\W]/.test(password) },
+    { label: t((d) => d.auth.register.passwordCheck8), pass: password.length >= 8 },
+    { label: t((d) => d.auth.register.passwordCheckUpper), pass: /[A-Z]/.test(password) },
+    { label: t((d) => d.auth.register.passwordCheckNumber), pass: /[\d\W]/.test(password) },
   ];
   const score = checks.filter((c) => c.pass).length;
   const colors = ['var(--error-text)', 'var(--warning-text)', 'var(--warning-text)', 'var(--success-text)'];
@@ -45,6 +47,7 @@ function PasswordStrength({ password }: { password: string }) {
 
 export default function RegisterPage() {
   const { register } = useAuth();
+  const { t } = usePreferences();
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -67,7 +70,7 @@ export default function RegisterPage() {
     setError(null);
 
     if (!companySlug) {
-      setError('Please enter a company name that includes at least one letter or number.');
+      setError(t((d) => d.auth.register.slugError));
       return;
     }
 
@@ -88,9 +91,9 @@ export default function RegisterPage() {
           <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg">
             <Zap size={18} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Create your workspace</h1>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{t((d) => d.auth.register.title)}</h1>
           <p className="mt-1.5 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-            Start your AI marketing journey
+            {t((d) => d.auth.register.subtitle)}
           </p>
         </div>
 
@@ -100,14 +103,14 @@ export default function RegisterPage() {
         >
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="First name"
+              label={t((d) => d.auth.register.firstNameLabel)}
               required
               autoComplete="given-name"
               value={form.firstName}
               onChange={update('firstName')}
             />
             <Input
-              label="Last name"
+              label={t((d) => d.auth.register.lastNameLabel)}
               required
               autoComplete="family-name"
               value={form.lastName}
@@ -117,38 +120,38 @@ export default function RegisterPage() {
 
           <div>
             <Input
-              label="Company name"
+              label={t((d) => d.auth.register.companyNameLabel)}
               required
               value={form.companyName}
               onChange={update('companyName')}
-              placeholder="Acme Inc."
+              placeholder={t((d) => d.auth.register.companyNamePlaceholder)}
             />
             {companySlug && (
-              <p className="mt-1.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                Workspace address: <span className="font-mono">{companySlug}</span>
+              <p className="mt-1.5 text-xs" dir="ltr" style={{ color: 'var(--text-tertiary)', textAlign: 'start' }}>
+                {t((d) => d.auth.register.workspaceAddress)} <span className="font-mono">{companySlug}</span>
               </p>
             )}
           </div>
 
           <Input
-            label="Work email"
+            label={t((d) => d.auth.register.emailLabel)}
             type="email"
             required
             autoComplete="email"
             value={form.email}
             onChange={update('email')}
-            placeholder="you@company.com"
+            placeholder={t((d) => d.auth.register.emailPlaceholder)}
           />
 
           <div>
             <Input
-              label="Password"
+              label={t((d) => d.auth.register.passwordLabel)}
               type="password"
               required
               autoComplete="new-password"
               value={form.password}
               onChange={update('password')}
-              placeholder="Min. 8 characters"
+              placeholder={t((d) => d.auth.register.passwordPlaceholder)}
               minLength={8}
             />
             <PasswordStrength password={form.password} />
@@ -164,14 +167,14 @@ export default function RegisterPage() {
           )}
 
           <Button type="submit" loading={loading} className="w-full mt-2">
-            Create account →
+            {t((d) => d.auth.register.submit)}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
-          Already have an account?{' '}
+          {t((d) => d.auth.register.haveAccount)}{' '}
           <Link href="/login" className="font-medium text-blue-600 hover:underline">
-            Sign in
+            {t((d) => d.auth.register.signIn)}
           </Link>
         </p>
       </div>

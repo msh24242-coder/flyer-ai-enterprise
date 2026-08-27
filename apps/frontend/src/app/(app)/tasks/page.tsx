@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
@@ -12,9 +13,11 @@ import { CheckSquare, Trash2, Calendar, ChevronDown } from 'lucide-react';
 import type { BadgeVariant } from '@/components/ui/badge';
 
 type Task = { id: string; title: string; status: string; priority: string; dueDate?: string; description?: string };
+type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'BLOCKED' | 'DONE' | 'CANCELLED';
+type TaskPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
-const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'];
-const FILTERS = ['all', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'];
+const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'];
+const FILTERS: Array<'all' | TaskStatus> = ['all', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'];
 
 function statusVariant(status: string): BadgeVariant {
   const map: Record<string, BadgeVariant> = {
@@ -31,23 +34,27 @@ function priorityDot(priority: string) {
 
 export default function TasksPage() {
   const { user, accessToken } = useAuth();
+  const { t, formatDate, pluralize } = usePreferences();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState<'all' | TaskStatus>('all');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
 
+  const taskStatusLabels = t((d) => d.enums.taskStatus);
+  const taskPriorityLabels = t((d) => d.enums.taskPriority);
+
   useEffect(() => {
     if (!companyId || !token) return;
     api.tasks.list(companyId, token)
       .then(setTasks)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load tasks'))
+      .catch((err) => setError(err instanceof Error ? err.message : t((d) => d.tasks.failedToLoad)))
       .finally(() => setLoading(false));
-  }, [companyId, token]);
+  }, [companyId, token, t]);
 
   async function handleStatusChange(taskId: string, status: string) {
     setUpdatingId(taskId);
@@ -55,20 +62,20 @@ export default function TasksPage() {
       const updated = await api.tasks.update(companyId, token, taskId, { status });
       setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: updated.status } : t));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update task');
+      setError(err instanceof Error ? err.message : t((d) => d.tasks.failedToUpdate));
     } finally {
       setUpdatingId(null);
     }
   }
 
   async function handleDelete(taskId: string) {
-    if (!confirm('Delete this task?')) return;
+    if (!confirm(t((d) => d.tasks.deleteConfirm))) return;
     setDeletingId(taskId);
     try {
       await api.tasks.delete(companyId, token, taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete task');
+      setError(err instanceof Error ? err.message : t((d) => d.tasks.failedToDelete));
     } finally {
       setDeletingId(null);
     }
@@ -78,8 +85,8 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Tasks" />
-      <PageHeader title="Tasks" description="Track and manage your marketing task queue" />
+      <Header title={t((d) => d.tasks.title)} />
+      <PageHeader title={t((d) => d.tasks.title)} description={t((d) => d.tasks.subtitle)} />
 
       <div className="flex-1 p-6 space-y-4">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -94,11 +101,11 @@ export default function TasksPage() {
                   : { background: 'var(--surface-1)', color: 'var(--text-secondary)', border: '1px solid var(--surface-border)' }
               }
             >
-              {s === 'all' ? 'All' : s.replace('_', ' ')}
+              {s === 'all' ? t((d) => d.common.all) : taskStatusLabels[s]}
             </button>
           ))}
-          <span className="text-xs ml-auto" style={{ color: 'var(--text-tertiary)' }}>
-            {filtered.length} task{filtered.length !== 1 ? 's' : ''}
+          <span className="text-xs ms-auto" style={{ color: 'var(--text-tertiary)' }}>
+            {pluralize(filtered.length, t((d) => d.units.task))}
           </span>
         </div>
 
@@ -116,8 +123,8 @@ export default function TasksPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={CheckSquare}
-            title={filter === 'all' ? 'No tasks yet' : `No ${filter.replace('_', ' ').toLowerCase()} tasks`}
-            description={filter === 'all' ? 'The AI Director creates tasks automatically as part of campaigns.' : 'Try a different filter.'}
+            title={filter === 'all' ? t((d) => d.tasks.noTasksYet) : t((d) => d.tasks.noFilteredTasks, { filter: taskStatusLabels[filter].toLowerCase() })}
+            description={filter === 'all' ? t((d) => d.tasks.emptyHint) : t((d) => d.common.tryDifferentFilter)}
           />
         ) : (
           <div className="space-y-2">
@@ -137,29 +144,29 @@ export default function TasksPage() {
                   </p>
                   {task.dueDate && (
                     <p className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      <Calendar size={10} /> Due {new Date(task.dueDate).toLocaleDateString()}
+                      <Calendar size={10} /> {t((d) => d.tasks.duePrefix, { date: formatDate(task.dueDate) })}
                     </p>
                   )}
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
-                  <Badge variant={statusVariant(task.priority)}>{task.priority}</Badge>
+                  <Badge variant={statusVariant(task.priority)}>{taskPriorityLabels[task.priority as TaskPriority] ?? task.priority}</Badge>
                   <div className="relative">
                     <select
                       value={task.status}
                       onChange={(e) => void handleStatusChange(task.id, e.target.value)}
                       disabled={updatingId === task.id}
-                      className="appearance-none rounded-lg border pl-2 pr-6 py-1 text-xs cursor-pointer disabled:opacity-50"
+                      className="appearance-none rounded-lg border ps-2 pe-6 py-1 text-xs cursor-pointer disabled:opacity-50"
                       style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)', color: 'var(--text-secondary)' }}
                     >
-                      {TASK_STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                      {TASK_STATUSES.map((s) => <option key={s} value={s}>{taskStatusLabels[s]}</option>)}
                     </select>
-                    <ChevronDown size={10} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
+                    <ChevronDown size={10} className="pointer-events-none absolute end-1.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
                   </div>
                   <button
                     onClick={() => void handleDelete(task.id)}
                     disabled={deletingId === task.id}
                     className="flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                    title="Delete task"
+                    title={t((d) => d.tasks.deleteTooltip)}
                   >
                     {deletingId === task.id ? <span className="text-xs">…</span> : <Trash2 size={13} />}
                   </button>

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { BarChart3, Zap, DollarSign, TrendingUp } from 'lucide-react';
+import type { Translations } from '@/i18n/en';
 
 type AgentUsage = { agentType: string; executions: number; totalCostUsd: number; totalTokens: number };
 type UsageData = {
@@ -15,6 +17,7 @@ type UsageData = {
   totalInputTokens: number; totalOutputTokens: number;
   byAgent: AgentUsage[]; fromDate: string; toDate: string;
 };
+type AgentTypeKey = keyof Translations['enums']['agentType'];
 
 const AGENT_COLORS: Record<string, string> = {
   DIRECTOR: 'var(--brand-600)', STRATEGY: '#8b5cf6', RESEARCH: '#06b6d4',
@@ -24,6 +27,7 @@ const AGENT_COLORS: Record<string, string> = {
 
 export default function UsagePage() {
   const { user, accessToken } = useAuth();
+  const { t, formatDate, formatNumber, formatCurrency, pluralize } = usePreferences();
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,23 +36,26 @@ export default function UsagePage() {
     if (!user || !accessToken) return;
     api.company.getAiUsage(user.companyId, accessToken)
       .then((data) => setUsage(data as UsageData))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load usage'))
+      .catch((err) => setError(err instanceof Error ? err.message : t((d) => d.usage.failedToLoad)))
       .finally(() => setLoading(false));
-  }, [user, accessToken]);
+  }, [user, accessToken, t]);
+
+  const currencyOpts = { minimumFractionDigits: 4, maximumFractionDigits: 4 };
+  const agentTypeLabels = t((d) => d.enums.agentType);
 
   const stats = usage ? [
-    { label: 'Total Executions', value: usage.totalExecutions.toLocaleString(), icon: Zap, iconBg: 'var(--info-bg)', iconColor: 'var(--info-text)' },
-    { label: 'Total Cost', value: `$${Number(usage.totalCostUsd).toFixed(4)}`, icon: DollarSign, iconBg: 'var(--success-bg)', iconColor: 'var(--success-text)', sub: 'USD' },
-    { label: 'Input Tokens', value: Number(usage.totalInputTokens).toLocaleString(), icon: TrendingUp, iconBg: 'var(--warning-bg)', iconColor: 'var(--warning-text)' },
-    { label: 'Output Tokens', value: Number(usage.totalOutputTokens).toLocaleString(), icon: BarChart3, iconBg: 'var(--bg-muted)', iconColor: 'var(--text-secondary)' },
+    { label: t((d) => d.usage.totalExecutions), value: formatNumber(usage.totalExecutions), icon: Zap, iconBg: 'var(--info-bg)', iconColor: 'var(--info-text)' },
+    { label: t((d) => d.usage.totalCost), value: formatCurrency(Number(usage.totalCostUsd), 'USD', currencyOpts), icon: DollarSign, iconBg: 'var(--success-bg)', iconColor: 'var(--success-text)', sub: 'USD' },
+    { label: t((d) => d.usage.inputTokens), value: formatNumber(Number(usage.totalInputTokens)), icon: TrendingUp, iconBg: 'var(--warning-bg)', iconColor: 'var(--warning-text)' },
+    { label: t((d) => d.usage.outputTokens), value: formatNumber(Number(usage.totalOutputTokens)), icon: BarChart3, iconBg: 'var(--bg-muted)', iconColor: 'var(--text-secondary)' },
   ] : [];
 
   const maxExec = usage ? Math.max(...usage.byAgent.map((a) => a.executions), 1) : 1;
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="AI Usage" />
-      <PageHeader title="AI Usage" description="Agent execution metrics and cost analysis" />
+      <Header title={t((d) => d.usage.title)} />
+      <PageHeader title={t((d) => d.usage.title)} description={t((d) => d.usage.subtitle)} />
 
       <div className="flex-1 p-6 space-y-6">
         {error && (
@@ -68,14 +75,14 @@ export default function UsagePage() {
         ) : !usage ? (
           <EmptyState
             icon={BarChart3}
-            title="No usage data"
-            description="Start using the AI Director to see execution metrics and cost analysis."
+            title={t((d) => d.usage.noUsageData)}
+            description={t((d) => d.usage.emptyHint)}
           />
         ) : (
           <div className="space-y-6">
             {/* Date range */}
             <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              Data from {new Date(usage.fromDate).toLocaleDateString()} to {new Date(usage.toDate).toLocaleDateString()}
+              {t((d) => d.usage.dataRange, { from: formatDate(usage.fromDate), to: formatDate(usage.toDate) })}
             </p>
 
             {/* Stats grid */}
@@ -101,7 +108,7 @@ export default function UsagePage() {
             {usage.byAgent.length > 0 && (
               <div className="rounded-xl border" style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)', boxShadow: 'var(--shadow-xs)' }}>
                 <div className="border-b px-5 py-4" style={{ borderColor: 'var(--surface-border)' }}>
-                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Usage by Agent</h3>
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t((d) => d.usage.usageByAgent)}</h3>
                 </div>
                 <div className="divide-y" style={{ borderColor: 'var(--surface-border)' }}>
                   {usage.byAgent.map((agent) => (
@@ -110,14 +117,19 @@ export default function UsagePage() {
                         <div className="flex items-center gap-2">
                           <span className="h-2.5 w-2.5 rounded-full flex-shrink-0"
                             style={{ background: AGENT_COLORS[agent.agentType] ?? 'var(--text-tertiary)' }} />
-                          <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{agent.agentType}</p>
+                          <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {agentTypeLabels[agent.agentType as AgentTypeKey] ?? agent.agentType}
+                          </p>
                         </div>
-                        <div className="text-right">
+                        <div className="text-end">
                           <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                            ${Number(agent.totalCostUsd).toFixed(4)}
+                            {formatCurrency(Number(agent.totalCostUsd), 'USD', currencyOpts)}
                           </p>
                           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                            {agent.executions} exec · {Number(agent.totalTokens).toLocaleString()} tokens
+                            {t((d) => d.usage.execTokensSummary, {
+                              execCount: pluralize(agent.executions, t((d) => d.units.execution)),
+                              tokenCount: pluralize(Number(agent.totalTokens), t((d) => d.units.token)),
+                            })}
                           </p>
                         </div>
                       </div>

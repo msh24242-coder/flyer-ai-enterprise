@@ -1,14 +1,21 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Noto_Sans_Arabic } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/context/auth';
 import { ThemeProvider } from '@/context/theme';
 import { ToastProvider } from '@/context/toast';
+import { PreferencesProvider } from '@/context/preferences';
 
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-inter',
+});
+
+const notoSansArabic = Noto_Sans_Arabic({
+  subsets: ['arabic'],
+  display: 'swap',
+  variable: '--font-arabic',
 });
 
 export const metadata: Metadata = {
@@ -25,12 +32,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" dir="ltr" className={`${inter.variable} ${notoSansArabic.variable}`} suppressHydrationWarning>
       <body>
         <ThemeProvider>
-          <ToastProvider>
-            <AuthProvider>{children}</AuthProvider>
-          </ToastProvider>
+          <PreferencesProvider>
+            <ToastProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </ToastProvider>
+          </PreferencesProvider>
         </ThemeProvider>
       </body>
     </html>

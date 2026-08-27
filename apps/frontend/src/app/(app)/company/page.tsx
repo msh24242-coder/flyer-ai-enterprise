@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Users, Check, Globe, Briefcase, UserX } from 'lucide-react';
 import type { BadgeVariant } from '@/components/ui/badge';
+import type { Translations } from '@/i18n/en';
 
 type CompanyData = {
   id: string;
@@ -30,7 +32,9 @@ type Member = {
   isActive: boolean;
 };
 
-const ROLES = ['MEMBER', 'ADMIN', 'OWNER'] as const;
+type CompanyRole = keyof Translations['enums']['companyRole'];
+
+const ROLES: CompanyRole[] = ['MEMBER', 'ADMIN', 'OWNER'];
 
 function roleBadgeVariant(role: string): BadgeVariant {
   const map: Record<string, BadgeVariant> = { OWNER: 'warning', ADMIN: 'info', MEMBER: 'default' };
@@ -58,6 +62,7 @@ function Section({ icon: Icon, title, description, children }: {
 
 export default function CompanyPage() {
   const { user, accessToken } = useAuth();
+  const { t } = usePreferences();
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
 
@@ -75,6 +80,8 @@ export default function CompanyPage() {
   const [roleChanging, setRoleChanging] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
+  const companyRoleLabels = t((d) => d.enums.companyRole);
+
   const load = useCallback(async () => {
     if (!companyId || !token) return;
     try {
@@ -88,11 +95,11 @@ export default function CompanyPage() {
       setWebsite(co.website ?? '');
       setMembers(mems);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load company');
+      setError(err instanceof Error ? err.message : t((d) => d.company.failedToLoad));
     } finally {
       setLoading(false);
     }
-  }, [companyId, token]);
+  }, [companyId, token, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -111,7 +118,7 @@ export default function CompanyPage() {
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+      setError(err instanceof Error ? err.message : t((d) => d.company.failedToSave));
     } finally {
       setSavingProfile(false);
     }
@@ -123,20 +130,20 @@ export default function CompanyPage() {
       await api.company.updateMemberRole(companyId, token, memberId, role);
       setMembers((prev) => prev.map((m) => m.id === memberId ? { ...m, role } : m));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update role');
+      setError(err instanceof Error ? err.message : t((d) => d.company.failedToUpdateRole));
     } finally {
       setRoleChanging(null);
     }
   }
 
   async function handleRemove(memberId: string) {
-    if (!confirm('Remove this member from the company?')) return;
+    if (!confirm(t((d) => d.company.removeMemberConfirm))) return;
     setRemoving(memberId);
     try {
       await api.company.removeMember(companyId, token, memberId);
       setMembers((prev) => prev.filter((m) => m.id !== memberId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove member');
+      setError(err instanceof Error ? err.message : t((d) => d.company.failedToRemoveMember));
     } finally {
       setRemoving(null);
     }
@@ -144,8 +151,8 @@ export default function CompanyPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Company" />
-      <PageHeader title="Company" description="Manage your organization profile and team members" />
+      <Header title={t((d) => d.company.title)} />
+      <PageHeader title={t((d) => d.company.title)} description={t((d) => d.company.subtitle)} />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5 max-w-2xl">
         {error && (
@@ -156,52 +163,52 @@ export default function CompanyPage() {
         )}
 
         {/* Company Profile */}
-        <Section icon={Building2} title="Company Profile" description="Your organization's name, industry, and web presence">
+        <Section icon={Building2} title={t((d) => d.company.profileTitle)} description={t((d) => d.company.profileDesc)}>
           {loading ? (
             <Skeleton className="h-48 w-full" />
           ) : (
             <form onSubmit={(e) => void handleSaveProfile(e)} className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Company Name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Corp" />
+                <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t((d) => d.company.nameLabel)}</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t((d) => d.company.namePlaceholder)} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                    <span className="flex items-center gap-1"><Briefcase size={11} /> Industry</span>
+                    <span className="flex items-center gap-1"><Briefcase size={11} /> {t((d) => d.company.industryLabel)}</span>
                   </label>
-                  <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. SaaS, E-commerce" />
+                  <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder={t((d) => d.company.industryPlaceholder)} />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                    <span className="flex items-center gap-1"><Globe size={11} /> Website</span>
+                    <span className="flex items-center gap-1"><Globe size={11} /> {t((d) => d.company.websiteLabel)}</span>
                   </label>
-                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://example.com" type="url" />
+                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t((d) => d.company.websitePlaceholder)} type="url" />
                 </div>
               </div>
 
               {company && (
-                <div className="rounded-lg px-3 py-2.5 text-xs font-mono" style={{ background: 'var(--bg-muted)', color: 'var(--text-tertiary)' }}>
-                  ID: {company.id.slice(0, 16)}… · Slug: {company.slug}
+                <div dir="ltr" className="rounded-lg px-3 py-2.5 text-xs font-mono text-start" style={{ background: 'var(--bg-muted)', color: 'var(--text-tertiary)' }}>
+                  {t((d) => d.company.idSlugLine, { id: company.id.slice(0, 16), slug: company.slug })}
                 </div>
               )}
 
               {profileSuccess && (
                 <div className="flex items-center gap-2 rounded-lg border px-4 py-3 text-sm"
                   style={{ background: 'var(--success-bg)', borderColor: 'var(--success-border)', color: 'var(--success-text)' }}>
-                  <Check size={14} /> Profile saved successfully
+                  <Check size={14} /> {t((d) => d.company.profileSaved)}
                 </div>
               )}
 
               <Button type="submit" loading={savingProfile} size="sm">
-                {savingProfile ? 'Saving…' : 'Save Profile'}
+                {savingProfile ? t((d) => d.common.saving) : t((d) => d.company.saveProfile)}
               </Button>
             </form>
           )}
         </Section>
 
         {/* Team Members */}
-        <Section icon={Users} title="Team Members" description="Manage roles and access for your organization">
+        <Section icon={Users} title={t((d) => d.company.membersTitle)} description={t((d) => d.company.membersDesc)}>
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
@@ -209,8 +216,8 @@ export default function CompanyPage() {
           ) : members.length === 0 ? (
             <EmptyState
               icon={Users}
-              title="No team members"
-              description="Invite your team to collaborate in SH Marketing."
+              title={t((d) => d.company.noMembers)}
+              description={t((d) => d.company.noMembersHint)}
             />
           ) : (
             <div className="space-y-2">
@@ -235,7 +242,7 @@ export default function CompanyPage() {
                       {member.id === user?.id && (
                         <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
                           style={{ background: 'var(--brand-600)', color: '#fff' }}>
-                          You
+                          {t((d) => d.company.you)}
                         </span>
                       )}
                     </div>
@@ -245,7 +252,7 @@ export default function CompanyPage() {
                   {/* Role */}
                   <div className="flex-shrink-0">
                     {member.id === user?.id || member.role === 'OWNER' ? (
-                      <Badge variant={roleBadgeVariant(member.role)}>{member.role}</Badge>
+                      <Badge variant={roleBadgeVariant(member.role)}>{companyRoleLabels[member.role as CompanyRole] ?? member.role}</Badge>
                     ) : (
                       <select
                         value={member.role}
@@ -255,7 +262,7 @@ export default function CompanyPage() {
                         style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)', color: 'var(--text-primary)' }}
                       >
                         {ROLES.filter((r) => r !== 'OWNER').map((r) => (
-                          <option key={r} value={r}>{r}</option>
+                          <option key={r} value={r}>{companyRoleLabels[r]}</option>
                         ))}
                       </select>
                     )}
@@ -268,7 +275,7 @@ export default function CompanyPage() {
                       disabled={removing === member.id}
                       className="flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                       style={{ color: 'var(--error-text)' }}
-                      title="Remove member"
+                      title={t((d) => d.company.removeMemberTooltip)}
                     >
                       {removing === member.id
                         ? <span className="text-xs">…</span>

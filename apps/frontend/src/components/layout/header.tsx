@@ -3,16 +3,20 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/auth';
 import { useMobileNav } from '@/context/mobile-nav';
-import { LogOut, ChevronDown, User, Menu } from 'lucide-react';
+import { usePreferences } from '@/context/preferences';
+import { LOCALE_LABELS } from '@/i18n/config';
+import { LogOut, ChevronDown, User, Menu, Globe } from 'lucide-react';
 
 export function Header({ title }: { title?: string }) {
   const { user, logout } = useAuth();
   const { toggle } = useMobileNav();
+  const { t, locale, setLocale } = usePreferences();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const initials = user
     ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase()
     : '?';
+  const otherLocale = locale === 'en' ? 'ar' : 'en';
 
   return (
     <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b px-4 sm:px-6"
@@ -20,7 +24,7 @@ export function Header({ title }: { title?: string }) {
     >
       <button
         onClick={toggle}
-        aria-label="Toggle navigation menu"
+        aria-label={t((d) => d.header.toggleMenu)}
         className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-muted)] md:hidden"
       >
         <Menu size={18} style={{ color: 'var(--text-secondary)' }} />
@@ -32,7 +36,18 @@ export function Header({ title }: { title?: string }) {
         </h1>
       )}
 
-      <div className="ml-auto relative">
+      <button
+        onClick={() => setLocale(otherLocale)}
+        aria-label={`${LOCALE_LABELS.en} / ${LOCALE_LABELS.ar}`}
+        title={`${LOCALE_LABELS.en} / ${LOCALE_LABELS.ar}`}
+        className="ms-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--bg-muted)]"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        <Globe size={14} />
+        {LOCALE_LABELS[otherLocale]}
+      </button>
+
+      <div className="relative">
         <button
           onClick={() => setMenuOpen((o) => !o)}
           className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--bg-muted)] focus:outline-none"
@@ -41,7 +56,7 @@ export function Header({ title }: { title?: string }) {
             {initials}
           </span>
           <span className="hidden text-sm font-medium sm:block" style={{ color: 'var(--text-primary)' }}>
-            {user ? `${user.firstName} ${user.lastName}` : 'Account'}
+            {user ? `${user.firstName} ${user.lastName}` : t((d) => d.header.account)}
           </span>
           <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
         </button>
@@ -50,7 +65,7 @@ export function Header({ title }: { title?: string }) {
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
             <div
-              className="absolute right-0 z-20 mt-2 w-56 rounded-xl border py-1 shadow-xl animate-fade-in"
+              className="absolute end-0 z-20 mt-2 w-56 rounded-xl border py-1 shadow-xl animate-fade-in"
               style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
             >
               {user && (
@@ -82,14 +97,14 @@ export function Header({ title }: { title?: string }) {
                   }}
                 >
                   <User size={14} />
-                  Profile & Settings
+                  {t((d) => d.header.profileSettings)}
                 </button>
                 <button
                   className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 transition-colors hover:bg-red-50"
                   onClick={() => { setMenuOpen(false); logout(); }}
                 >
                   <LogOut size={14} />
-                  Sign out
+                  {t((d) => d.header.signOut)}
                 </button>
               </div>
             </div>

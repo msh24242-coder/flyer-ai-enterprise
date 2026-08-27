@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, KeyboardEvent } from 'react';
 import { useAuth } from '@/context/auth';
 import { useMobileNav } from '@/context/mobile-nav';
+import { usePreferences } from '@/context/preferences';
 import { api, friendlyMessage } from '@/lib/api';
 import {
   BrainCircuit, Plus, Trash2, Send, ChevronLeft, ChevronRight, Menu,
@@ -45,27 +46,15 @@ interface ApprovalDetail {
   status: string;
 }
 
-const SUGGESTIONS = [
-  { icon: Target, text: 'What should our marketing focus be this quarter?' },
-  { icon: Megaphone, text: 'Create a Q4 lead generation campaign for us' },
-  { icon: BookOpen, text: 'What do you know about our brand voice?' },
-  { icon: Sparkles, text: 'Analyze our current marketing performance' },
-];
-
-const TOOL_VERB_LABELS: Record<string, string> = {
-  list: 'Listing', create: 'Creating', update: 'Updating', search: 'Searching',
-  store: 'Storing', analyze: 'Analyzing', get: 'Getting', review: 'Reviewing',
-  delete: 'Deleting', generate: 'Generating', find: 'Finding',
-};
-
-function humanizeToolName(toolName: string): string {
+function humanizeToolName(toolName: string, verbLabels: Record<string, string>): string {
   const [verb, ...rest] = toolName.split('_');
-  const label = TOOL_VERB_LABELS[verb] ?? (verb.charAt(0).toUpperCase() + verb.slice(1));
+  const label = verbLabels[verb] ?? (verb.charAt(0).toUpperCase() + verb.slice(1));
   const subject = rest.join(' ');
   return subject ? `${label} ${subject}…` : `${label}…`;
 }
 
 function Bubble({ msg, onOpenApproval }: { msg: Message; onOpenApproval: (id: string) => void }) {
+  const { t } = usePreferences();
   const isUser = msg.role === 'user';
   return (
     <div className={`flex gap-3 mb-5 animate-fade-in ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -91,7 +80,7 @@ function Bubble({ msg, onOpenApproval }: { msg: Message; onOpenApproval: (id: st
                   <CheckCircle2 size={12} className="text-green-500" />
                 )}
                 <Wrench size={11} className="opacity-50" />
-                <span>{humanizeToolName(activity.toolName)}</span>
+                <span>{humanizeToolName(activity.toolName, t((d) => d.toolVerbs))}</span>
               </div>
             ))}
           </div>
@@ -99,7 +88,7 @@ function Bubble({ msg, onOpenApproval }: { msg: Message; onOpenApproval: (id: st
 
         {(msg.content || !msg.isStreaming) && (
           <div
-            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'rounded-tr-sm' : 'rounded-tl-sm'} ${msg.failed ? 'opacity-60' : ''}`}
+            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'rounded-se-sm' : 'rounded-ss-sm'} ${msg.failed ? 'opacity-60' : ''}`}
             style={
               isUser
                 ? { background: 'var(--brand-600)', color: '#ffffff' }
@@ -108,7 +97,7 @@ function Bubble({ msg, onOpenApproval }: { msg: Message; onOpenApproval: (id: st
           >
             <p className="whitespace-pre-wrap">
               {msg.content}
-              {msg.isStreaming && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-current align-middle" />}
+              {msg.isStreaming && <span className="ms-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-current align-middle" />}
             </p>
             {msg.meta && <p className="mt-2 text-xs opacity-60">{msg.meta}</p>}
           </div>
@@ -121,7 +110,7 @@ function Bubble({ msg, onOpenApproval }: { msg: Message; onOpenApproval: (id: st
             style={{ background: 'var(--warning-bg)', borderColor: 'var(--warning-border)', color: 'var(--warning-text)' }}
           >
             <ShieldAlert size={14} />
-            This action needs your approval — review
+            {t((d) => d.chat.approvalRequired)}
           </button>
         )}
       </div>
@@ -139,6 +128,7 @@ function ApprovalModal({
   onDeny: (note?: string) => void;
   onClose: () => void;
 }) {
+  const { t } = usePreferences();
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState<'approve' | 'deny' | null>(null);
 
@@ -154,8 +144,8 @@ function ApprovalModal({
             <ShieldAlert size={18} style={{ color: 'var(--warning-text)' }} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Approval required</h3>
-            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>An agent wants to perform a sensitive action</p>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t((d) => d.chat.approvalModalTitle)}</h3>
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{t((d) => d.chat.approvalModalSubtitle)}</p>
           </div>
         </div>
 
@@ -166,13 +156,13 @@ function ApprovalModal({
         ) : approval ? (
           <div className="space-y-3">
             <div className="rounded-lg border p-3" style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)' }}>
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Agent</p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{t((d) => d.chat.agent)}</p>
               <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{approval.agentType}</p>
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Tool</p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{t((d) => d.chat.tool)}</p>
               <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{approval.toolName}</p>
               {approval.reason && (
                 <>
-                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Reason</p>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{t((d) => d.chat.reason)}</p>
                   <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{approval.reason}</p>
                 </>
               )}
@@ -180,7 +170,7 @@ function ApprovalModal({
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional note…"
+              placeholder={t((d) => d.chat.notePlaceholder)}
               rows={2}
               className="w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none"
               style={{ background: 'var(--surface-2)', borderColor: 'var(--surface-border)', color: 'var(--text-primary)' }}
@@ -192,7 +182,7 @@ function ApprovalModal({
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--bg-muted)] disabled:opacity-50"
                 style={{ borderColor: 'var(--surface-border)', color: 'var(--text-secondary)' }}
               >
-                <X size={14} /> Deny
+                <X size={14} /> {t((d) => d.chat.deny)}
               </button>
               <button
                 disabled={submitting !== null}
@@ -200,7 +190,7 @@ function ApprovalModal({
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                 style={{ background: 'var(--brand-600)' }}
               >
-                <Check size={14} /> Approve
+                <Check size={14} /> {t((d) => d.chat.approve)}
               </button>
             </div>
           </div>
@@ -216,10 +206,11 @@ function ConvItem({
   conv: Conversation; active: boolean; onSelect: () => void; onDelete: () => void;
   onRename: (title: string) => void; onArchive: () => void;
 }) {
+  const { t, formatDate } = usePreferences();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(conv.title ?? '');
-  const label = conv.title ?? `Chat ${conv.id.slice(0, 8)}`;
-  const date = new Date(conv.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const label = conv.title ?? t((d) => d.chat.untitledConversation, { id: conv.id.slice(0, 8) });
+  const date = formatDate(conv.updatedAt);
 
   if (editing) {
     return (
@@ -259,21 +250,21 @@ function ConvItem({
         <button
           className="flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--bg-muted)] transition-colors"
           onClick={(e) => { e.stopPropagation(); setDraft(conv.title ?? ''); setEditing(true); }}
-          title="Rename"
+          title={t((d) => d.common.rename)}
         >
           <Pencil size={11} style={{ color: 'var(--text-tertiary)' }} />
         </button>
         <button
           className="flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--bg-muted)] transition-colors"
           onClick={(e) => { e.stopPropagation(); onArchive(); }}
-          title="Archive"
+          title={t((d) => d.common.archive)}
         >
           <Archive size={11} style={{ color: 'var(--text-tertiary)' }} />
         </button>
         <button
           className="flex h-5 w-5 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          title="Delete"
+          title={t((d) => d.common.delete)}
         >
           <Trash2 size={12} />
         </button>
@@ -285,6 +276,13 @@ function ConvItem({
 export default function ChatPage() {
   const { user, accessToken } = useAuth();
   const { toggle: toggleMobileNav } = useMobileNav();
+  const { t, formatCurrency, pluralize } = usePreferences();
+  const suggestions = [
+    { icon: Target, text: t((d) => d.chat.suggestion1) },
+    { icon: Megaphone, text: t((d) => d.chat.suggestion2) },
+    { icon: BookOpen, text: t((d) => d.chat.suggestion3) },
+    { icon: Sparkles, text: t((d) => d.chat.suggestion4) },
+  ];
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -327,8 +325,8 @@ export default function ChatPage() {
   const filteredConversations = useMemo(() => {
     if (!search.trim()) return conversations;
     const q = search.trim().toLowerCase();
-    return conversations.filter((c) => (c.title ?? `Chat ${c.id.slice(0, 8)}`).toLowerCase().includes(q));
-  }, [conversations, search]);
+    return conversations.filter((c) => (c.title ?? t((d) => d.chat.untitledConversation, { id: c.id.slice(0, 8) })).toLowerCase().includes(q));
+  }, [conversations, search, t]);
 
   function newConversation() {
     abortRef.current?.abort();
@@ -379,7 +377,7 @@ export default function ChatPage() {
       const next = [...prev];
       const last = next[next.length - 1];
       if (last && last.role === 'assistant' && last.isStreaming) {
-        next[next.length - 1] = { ...last, isStreaming: false, meta: 'Stopped' };
+        next[next.length - 1] = { ...last, isStreaming: false, meta: t((d) => d.chat.stopped) };
       }
       return next;
     });
@@ -431,8 +429,8 @@ export default function ChatPage() {
         }),
         onDone: (result) => {
           const metaParts = [
-            result.traceResult?.iterations != null ? `${result.traceResult.iterations} steps` : null,
-            result.traceResult?.estimatedCostUsd != null ? `$${Number(result.traceResult.estimatedCostUsd).toFixed(4)}` : null,
+            result.traceResult?.iterations != null ? pluralize(result.traceResult.iterations, t((d) => d.units.step)) : null,
+            result.traceResult?.estimatedCostUsd != null ? formatCurrency(Number(result.traceResult.estimatedCostUsd), 'USD', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : null,
           ].filter(Boolean);
           updateAssistant((m) => ({
             ...m,
@@ -501,18 +499,18 @@ export default function ChatPage() {
       {/* Conversation sidebar */}
       {sidebarOpen && (
         <div
-          className="flex w-60 flex-shrink-0 flex-col border-r"
+          className="flex w-60 flex-shrink-0 flex-col border-e"
           style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)' }}
         >
           <div className="flex items-center justify-between border-b px-3 py-3" style={{ borderColor: 'var(--surface-border)' }}>
             <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
-              Conversations
+              {t((d) => d.chat.conversations)}
             </span>
             <button
               onClick={newConversation}
-              aria-label="New conversation"
+              aria-label={t((d) => d.chat.newConversation)}
               className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-muted)]"
-              title="New conversation"
+              title={t((d) => d.chat.newConversation)}
             >
               <Plus size={14} style={{ color: 'var(--text-secondary)' }} />
             </button>
@@ -524,8 +522,8 @@ export default function ChatPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search conversations"
-                aria-label="Search conversations"
+                placeholder={t((d) => d.chat.searchConversations)}
+                aria-label={t((d) => d.chat.searchConversations)}
                 className="w-full bg-transparent text-xs outline-none"
                 style={{ color: 'var(--text-primary)' }}
               />
@@ -539,7 +537,7 @@ export default function ChatPage() {
               </div>
             ) : filteredConversations.length === 0 ? (
               <p className="py-6 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                {search ? 'No matching conversations.' : 'No conversations yet'}
+                {search ? t((d) => d.chat.noMatchingConversations) : t((d) => d.chat.noConversations)}
               </p>
             ) : (
               filteredConversations.map((conv) => (
@@ -574,7 +572,7 @@ export default function ChatPage() {
         >
           <button
             onClick={toggleMobileNav}
-            aria-label="Toggle navigation menu"
+            aria-label={t((d) => d.header.toggleMenu)}
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-muted)] md:hidden"
           >
             <Menu size={16} style={{ color: 'var(--text-secondary)' }} />
@@ -582,18 +580,20 @@ export default function ChatPage() {
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-muted)]"
-            title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-            aria-label={sidebarOpen ? 'Hide conversation list' : 'Show conversation list'}
+            title={sidebarOpen ? t((d) => d.chat.hideConversationList) : t((d) => d.chat.showConversationList)}
+            aria-label={sidebarOpen ? t((d) => d.chat.hideConversationList) : t((d) => d.chat.showConversationList)}
           >
-            {sidebarOpen ? <ChevronLeft size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronRight size={16} style={{ color: 'var(--text-secondary)' }} />}
+            {sidebarOpen
+              ? <ChevronLeft size={16} className="rtl:-scale-x-100" style={{ color: 'var(--text-secondary)' }} />
+              : <ChevronRight size={16} className="rtl:-scale-x-100" style={{ color: 'var(--text-secondary)' }} />}
           </button>
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700">
               <BrainCircuit size={12} className="text-white" />
             </div>
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Marketing Director</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t((d) => d.chat.title)}</span>
             <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'var(--success-bg)', color: 'var(--success-text)' }}>
-              Live AI
+              {t((d) => d.chat.liveAi)}
             </span>
           </div>
           <div className="flex-1" />
@@ -602,7 +602,7 @@ export default function ChatPage() {
             className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--bg-muted)]"
             style={{ borderColor: 'var(--surface-border)', color: 'var(--text-secondary)' }}
           >
-            <Plus size={12} /> New chat
+            <Plus size={12} /> {t((d) => d.chat.newChat)}
           </button>
         </div>
 
@@ -614,18 +614,17 @@ export default function ChatPage() {
                 <BrainCircuit size={28} className="text-white" />
               </div>
               <h3 className="mb-2 text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-                Meet your Marketing Director
+                {t((d) => d.chat.emptyTitle)}
               </h3>
               <p className="mb-8 max-w-md text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                Your AI marketing expert with access to goals, campaigns, content, and company knowledge.
-                Ask anything about your marketing strategy.
+                {t((d) => d.chat.emptyDescription)}
               </p>
-              <div className="grid max-w-lg gap-2 sm:grid-cols-2 text-left w-full">
-                {SUGGESTIONS.map(({ icon: Icon, text }) => (
+              <div className="grid max-w-lg gap-2 sm:grid-cols-2 text-start w-full">
+                {suggestions.map(({ icon: Icon, text }) => (
                   <button
                     key={text}
                     onClick={() => sendMessage(text)}
-                    className="flex items-start gap-3 rounded-xl border p-4 text-left text-sm transition-all duration-150 hover:shadow-sm hover:-translate-y-px"
+                    className="flex items-start gap-3 rounded-xl border p-4 text-start text-sm transition-all duration-150 hover:shadow-sm hover:-translate-y-px"
                     style={{
                       background: 'var(--surface-1)',
                       borderColor: 'var(--surface-border)',
@@ -656,7 +655,7 @@ export default function ChatPage() {
                   className="flex flex-shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-white/40"
                   style={{ borderColor: 'var(--error-border)' }}
                 >
-                  <RotateCcw size={11} /> Try again
+                  <RotateCcw size={11} /> {t((d) => d.common.tryAgain)}
                 </button>
               )}
             </div>
@@ -680,9 +679,9 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask the Marketing Director… (Enter to send, Shift+Enter for newline)"
+              placeholder={t((d) => d.chat.placeholder)}
               disabled={loading}
-              aria-label="Message the Marketing Director"
+              aria-label={t((d) => d.chat.placeholder)}
               className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:opacity-50 disabled:cursor-not-allowed"
               style={{ color: 'var(--text-primary)', maxHeight: 120 }}
               onInput={(e) => {
@@ -694,8 +693,8 @@ export default function ChatPage() {
             {loading ? (
               <button
                 onClick={stopGeneration}
-                title="Stop generating"
-                aria-label="Stop generating"
+                title={t((d) => d.chat.stopGenerating)}
+                aria-label={t((d) => d.chat.stopGenerating)}
                 className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white transition-all hover:bg-red-700"
                 style={{ background: 'var(--error-text)' }}
               >
@@ -705,16 +704,16 @@ export default function ChatPage() {
               <button
                 onClick={() => sendMessage()}
                 disabled={!input.trim()}
-                title="Send message"
-                aria-label="Send message"
+                title={t((d) => d.chat.sendMessage)}
+                aria-label={t((d) => d.chat.sendMessage)}
                 className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <Send size={14} />
+                <Send size={14} className="rtl:-scale-x-100" />
               </button>
             )}
           </div>
           <p className="mt-2 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            Real AI responses, streamed live · Shift+Enter for newline
+            {t((d) => d.chat.footerHint)}
           </p>
         </div>
       </div>

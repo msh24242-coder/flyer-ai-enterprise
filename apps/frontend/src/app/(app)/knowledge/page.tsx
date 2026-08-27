@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ type KnowledgeEntry = { id: string; category: string; key: string; value: unknow
 
 export default function KnowledgePage() {
   const { user, accessToken } = useAuth();
+  const { t, pluralize } = usePreferences();
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +33,11 @@ export default function KnowledgePage() {
       const data = await api.knowledge.list(companyId, token);
       setEntries(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load knowledge');
+      setError(err instanceof Error ? err.message : t((d) => d.knowledge.failedToLoad));
     } finally {
       setLoading(false);
     }
-  }, [companyId, token]);
+  }, [companyId, token, t]);
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
@@ -51,7 +53,7 @@ export default function KnowledgePage() {
       setCreating(false);
       await loadEntries();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save knowledge');
+      setError(err instanceof Error ? err.message : t((d) => d.knowledge.failedToSave));
     } finally {
       setSaving(false);
     }
@@ -62,7 +64,7 @@ export default function KnowledgePage() {
       await api.knowledge.delete(companyId, token, id);
       setEntries((prev) => prev.filter((e) => e.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete entry');
+      setError(err instanceof Error ? err.message : t((d) => d.knowledge.failedToDelete));
     }
   }
 
@@ -77,13 +79,13 @@ export default function KnowledgePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Knowledge" />
+      <Header title={t((d) => d.nav.knowledge)} />
       <PageHeader
-        title="Company Knowledge"
-        description="Structured knowledge your AI agents use to personalize all outputs"
+        title={t((d) => d.knowledge.title)}
+        description={t((d) => d.knowledge.subtitle)}
         actions={
           <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus size={14} /> Add Entry
+            <Plus size={14} /> {t((d) => d.knowledge.addEntry)}
           </Button>
         }
       />
@@ -100,29 +102,29 @@ export default function KnowledgePage() {
           <div className="rounded-xl border p-5 animate-fade-in"
             style={{ background: 'var(--surface-1)', borderColor: 'var(--surface-border)', boxShadow: 'var(--shadow-sm)' }}>
             <form onSubmit={handleCreate} className="space-y-4">
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>New Knowledge Entry</h3>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t((d) => d.knowledge.newEntry)}</h3>
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  label="Category"
+                  label={t((d) => d.knowledge.categoryLabel)}
                   required
-                  placeholder="e.g. brand"
+                  placeholder={t((d) => d.knowledge.categoryPlaceholder)}
                   value={form.category}
                   onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                 />
                 <Input
-                  label="Key"
+                  label={t((d) => d.knowledge.keyLabel)}
                   required
-                  placeholder="e.g. voice"
+                  placeholder={t((d) => d.knowledge.keyPlaceholder)}
                   value={form.key}
                   onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Value</label>
+                <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t((d) => d.knowledge.valueLabel)}</label>
                 <textarea
                   required
                   rows={3}
-                  placeholder='Text value or JSON, e.g. "Professional and empathetic"'
+                  placeholder={t((d) => d.knowledge.valuePlaceholder)}
                   value={form.value}
                   onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
                   className="w-full resize-none rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
@@ -130,8 +132,8 @@ export default function KnowledgePage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button type="submit" loading={saving} size="sm">{saving ? 'Saving…' : 'Save Entry'}</Button>
-                <Button variant="secondary" size="sm" onClick={() => { setCreating(false); setForm({ category: '', key: '', value: '' }); }}>Cancel</Button>
+                <Button type="submit" loading={saving} size="sm">{saving ? t((d) => d.common.saving) : t((d) => d.knowledge.saveEntry)}</Button>
+                <Button variant="secondary" size="sm" onClick={() => { setCreating(false); setForm({ category: '', key: '', value: '' }); }}>{t((d) => d.common.cancel)}</Button>
               </div>
             </form>
           </div>
@@ -144,9 +146,9 @@ export default function KnowledgePage() {
         ) : entries.length === 0 ? (
           <EmptyState
             icon={BookOpen}
-            title="No knowledge entries"
-            description="Add company knowledge like brand voice, target audience, products, and positioning to help your AI agents personalize all outputs."
-            action={<Button size="sm" onClick={() => setCreating(true)}><Plus size={14} /> Add First Entry</Button>}
+            title={t((d) => d.knowledge.noEntriesYet)}
+            description={t((d) => d.knowledge.emptyHint)}
+            action={<Button size="sm" onClick={() => setCreating(true)}><Plus size={14} /> {t((d) => d.knowledge.addFirstEntry)}</Button>}
           />
         ) : (
           <div className="space-y-8">
@@ -163,7 +165,7 @@ export default function KnowledgePage() {
                     <Tag size={10} />
                     {category}
                   </div>
-                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{items.length} entries</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{pluralize(items.length, t((d) => d.units.entry))}</span>
                 </div>
                 <div className="space-y-2">
                   {items.map((entry) => (
@@ -181,7 +183,7 @@ export default function KnowledgePage() {
                       <button
                         onClick={() => handleDelete(entry.id)}
                         className="flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:bg-red-50 hover:text-red-600"
-                        title="Remove entry"
+                        title={t((d) => d.knowledge.removeTooltip)}
                       >
                         <Trash2 size={13} />
                       </button>

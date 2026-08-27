@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
@@ -10,14 +11,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { FileText, ChevronDown, ChevronUp, Trash2, Copy, Check } from 'lucide-react';
 import type { BadgeVariant } from '@/components/ui/badge';
+import type { Translations } from '@/i18n/en';
 
 type ContentItem = { id: string; agentType: string; contentType: string; title?: string; content: string; createdAt: string };
-
-const CONTENT_TYPE_LABELS: Record<string, string> = {
-  social_post: 'Social Post', email_brief: 'Email Brief', blog_outline: 'Blog Outline',
-  ad_copy: 'Ad Copy', content_calendar: 'Content Calendar', strategy: 'Strategy',
-  campaign_plan: 'Campaign Plan', copy: 'Copy',
-};
+type ContentTypeKey = keyof Translations['content']['types'];
+type AgentTypeKey = keyof Translations['enums']['agentType'];
 
 function agentBadgeVariant(agentType: string): BadgeVariant {
   const map: Record<string, BadgeVariant> = { CONTENT: 'info', SOCIAL: 'success', STRATEGY: 'warning', DIRECTOR: 'default' };
@@ -25,6 +23,7 @@ function agentBadgeVariant(agentType: string): BadgeVariant {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const { t } = usePreferences();
   const [copied, setCopied] = useState(false);
   function copy(e: React.MouseEvent) {
     e.stopPropagation();
@@ -40,13 +39,14 @@ function CopyButton({ text }: { text: string }) {
       style={{ color: copied ? 'var(--success-text)' : 'var(--text-tertiary)' }}
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
-      {copied ? 'Copied' : 'Copy'}
+      {copied ? t((d) => d.common.copied) : t((d) => d.common.copy)}
     </button>
   );
 }
 
 export default function ContentPage() {
   const { user, accessToken } = useAuth();
+  const { t, formatDateTime } = usePreferences();
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,23 +57,30 @@ export default function ContentPage() {
   const companyId = user?.companyId ?? '';
   const token = accessToken ?? '';
 
+  const contentTypeLabels = t((d) => d.content.types);
+  const agentTypeLabels = t((d) => d.enums.agentType);
+
+  function contentTypeLabel(ct: string): string {
+    return contentTypeLabels[ct as ContentTypeKey] ?? ct;
+  }
+
   useEffect(() => {
     if (!companyId || !token) return;
     setLoading(true);
     api.content.list(companyId, token, filter !== 'all' ? filter : undefined)
       .then(setItems)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load content'))
+      .catch((err) => setError(err instanceof Error ? err.message : t((d) => d.content.failedToLoad)))
       .finally(() => setLoading(false));
-  }, [companyId, token, filter]);
+  }, [companyId, token, filter, t]);
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this content?')) return;
+    if (!confirm(t((d) => d.content.deleteConfirm))) return;
     setDeletingId(id);
     try {
       await api.content.delete(companyId, token, id);
       setItems((prev) => prev.filter((i) => i.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
+      setError(err instanceof Error ? err.message : t((d) => d.content.failedToDelete));
     } finally {
       setDeletingId(null);
     }
@@ -83,8 +90,8 @@ export default function ContentPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Content" />
-      <PageHeader title="Content Studio" description="AI-generated content — social posts, copy, strategies, and more" />
+      <Header title={t((d) => d.nav.content)} />
+      <PageHeader title={t((d) => d.content.title)} description={t((d) => d.content.subtitle)} />
 
       <div className="flex-1 p-6 space-y-4">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -99,7 +106,7 @@ export default function ContentPage() {
                   : { background: 'var(--surface-1)', color: 'var(--text-secondary)', border: '1px solid var(--surface-border)' }
               }
             >
-              {ct === 'all' ? 'All' : (CONTENT_TYPE_LABELS[ct] ?? ct)}
+              {ct === 'all' ? t((d) => d.common.all) : contentTypeLabel(ct)}
             </button>
           ))}
         </div>
@@ -118,8 +125,8 @@ export default function ContentPage() {
         ) : items.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title="No content yet"
-            description="Ask the AI Director to generate content — social posts, email briefs, ad copy, and more will appear here."
+            title={t((d) => d.content.noContentYet)}
+            description={t((d) => d.content.emptyHint)}
           />
         ) : (
           <div className="space-y-3">
@@ -141,13 +148,13 @@ export default function ContentPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         <p className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>
-                          {item.title ?? (CONTENT_TYPE_LABELS[item.contentType] ?? item.contentType)}
+                          {item.title ?? contentTypeLabel(item.contentType)}
                         </p>
-                        <Badge variant={agentBadgeVariant(item.agentType)}>{item.agentType}</Badge>
-                        <Badge variant="default">{CONTENT_TYPE_LABELS[item.contentType] ?? item.contentType}</Badge>
+                        <Badge variant={agentBadgeVariant(item.agentType)}>{agentTypeLabels[item.agentType as AgentTypeKey] ?? item.agentType}</Badge>
+                        <Badge variant="default">{contentTypeLabel(item.contentType)}</Badge>
                       </div>
                       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                        {new Date(item.createdAt).toLocaleString()}
+                        {formatDateTime(item.createdAt)}
                       </p>
                       {!isExpanded && (
                         <p className="mt-1.5 line-clamp-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{item.content}</p>

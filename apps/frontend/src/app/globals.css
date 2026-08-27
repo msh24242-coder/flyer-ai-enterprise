@@ -75,7 +75,7 @@
   --radius-full: 9999px;
 
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
 
   /* Animation */
@@ -174,6 +174,22 @@ body {
   background-color: var(--bg-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── RTL (Arabic) ───────────────────────────────────────────────────────── */
+/* Arabic gets its own font — Inter's Arabic glyph coverage is minimal.
+   Latin text/digits inside Arabic content (brand names, URLs, numbers)
+   still render fine since Noto Sans Arabic is only applied where the
+   Arabic script itself is being drawn; browsers fall back per-character. */
+html[dir='rtl'] body {
+  font-family: var(--font-arabic), var(--font-sans);
+}
+
+/* Scrollbar and skeleton shimmer are directional gradients; mirror them
+   under RTL so they don't visually animate/sit backwards. */
+html[dir='rtl'] .skeleton {
+  background: linear-gradient(270deg, var(--bg-muted) 25%, var(--bg-emphasis) 50%, var(--bg-muted) 75%);
+  background-size: 200% 100%;
 }
 
 /* ─── Typography ─────────────────────────────────────────────────────────── */

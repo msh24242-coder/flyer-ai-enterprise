@@ -4,16 +4,11 @@ import { Suspense, useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { friendlyMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Zap, BarChart3, Target, BrainCircuit, Info } from 'lucide-react';
-
-const features = [
-  { icon: BrainCircuit, label: 'AI Marketing Director', desc: '8 specialized AI agents working for you' },
-  { icon: Target, label: 'Goal Tracking', desc: 'Set objectives and measure outcomes' },
-  { icon: BarChart3, label: 'Campaign Analytics', desc: 'Real-time performance insights' },
-];
 
 export default function LoginPage() {
   return (
@@ -25,12 +20,19 @@ export default function LoginPage() {
 
 function LoginForm() {
   const { login } = useAuth();
+  const { t } = usePreferences();
   const searchParams = useSearchParams();
   const sessionExpired = searchParams.get('reason') === 'session_expired';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const features = [
+    { icon: BrainCircuit, label: t((d) => d.auth.login.feature1Title), desc: t((d) => d.auth.login.feature1Desc) },
+    { icon: Target, label: t((d) => d.auth.login.feature2Title), desc: t((d) => d.auth.login.feature2Desc) },
+    { icon: BarChart3, label: t((d) => d.auth.login.feature3Title), desc: t((d) => d.auth.login.feature3Desc) },
+  ];
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -47,26 +49,25 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg-subtle)' }}>
-      {/* Left brand panel */}
+      {/* Brand panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-[#0f1117]">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg">
             <Zap size={16} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-100">SH Marketing</p>
-            <p className="text-[10px] text-slate-500">AI Enterprise Platform</p>
+            <p className="text-sm font-semibold text-slate-100">{t((d) => d.sidebar.productName)}</p>
+            <p className="text-[10px] text-slate-500">{t((d) => d.auth.login.brandTagline)}</p>
           </div>
         </div>
 
         <div>
           <h2 className="text-4xl font-bold text-white leading-tight mb-4">
-            Your marketing,<br />
-            <span className="text-blue-400">amplified by AI.</span>
+            {t((d) => d.auth.login.brandHeadlineLine1)}<br />
+            <span className="text-blue-400">{t((d) => d.auth.login.brandHeadlineLine2)}</span>
           </h2>
           <p className="text-slate-400 text-base mb-10 max-w-sm">
-            An enterprise AI marketing platform with 8 specialized agents, real-time analytics,
-            and intelligent automation that scales with your team.
+            {t((d) => d.auth.login.brandDescription)}
           </p>
           <div className="space-y-4">
             {features.map(({ icon: Icon, label, desc }) => (
@@ -83,23 +84,23 @@ function LoginForm() {
           </div>
         </div>
 
-        <p className="text-xs text-slate-600">© 2026 SH Marketing. Enterprise AI Platform.</p>
+        <p className="text-xs text-slate-600">{t((d) => d.auth.login.footer, { year: 2026 })}</p>
       </div>
 
-      {/* Right form panel */}
+      {/* Form panel */}
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
               <Zap size={14} className="text-white" />
             </div>
-            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>SH Marketing</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t((d) => d.sidebar.productName)}</span>
           </div>
 
           <div className="mb-8">
-            <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Welcome back</h1>
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{t((d) => d.auth.login.title)}</h1>
             <p className="mt-1.5 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-              Sign in to your workspace
+              {t((d) => d.auth.login.subtitle)}
             </p>
           </div>
 
@@ -109,28 +110,28 @@ function LoginForm() {
               style={{ background: 'var(--info-bg)', borderColor: 'var(--info-border)', color: 'var(--info-text)' }}
             >
               <Info size={16} className="mt-0.5 flex-shrink-0" />
-              <span>Your session expired. Please sign in again.</span>
+              <span>{t((d) => d.auth.login.sessionExpired)}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Email address"
+              label={t((d) => d.auth.login.emailLabel)}
               type="email"
               required
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
+              placeholder={t((d) => d.auth.login.emailPlaceholder)}
             />
             <Input
-              label="Password"
+              label={t((d) => d.auth.login.passwordLabel)}
               type="password"
               required
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder={t((d) => d.auth.login.passwordPlaceholder)}
             />
 
             {error && (
@@ -143,14 +144,14 @@ function LoginForm() {
             )}
 
             <Button type="submit" loading={loading} className="w-full mt-2">
-              Sign in →
+              {t((d) => d.auth.login.submit)}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
-            Don&apos;t have an account?{' '}
+            {t((d) => d.auth.login.noAccount)}{' '}
             <Link href="/register" className="font-medium text-blue-600 hover:underline">
-              Create account
+              {t((d) => d.auth.login.createAccount)}
             </Link>
           </p>
         </div>

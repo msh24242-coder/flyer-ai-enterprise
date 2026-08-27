@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth';
+import { usePreferences } from '@/context/preferences';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/stat-card';
 import { Target, Megaphone, CheckSquare, BrainCircuit, ArrowRight, TrendingUp } from 'lucide-react';
 import type { BadgeVariant } from '@/components/ui/badge';
+import type { Translations } from '@/i18n/en';
 
 type Goal = { id: string; title: string; status: string };
 type Campaign = { id: string; title: string; status: string; budget?: number };
@@ -38,6 +40,7 @@ function SectionCard({
   emptyText: string;
   children: React.ReactNode;
 }) {
+  const { t } = usePreferences();
   return (
     <div
       className="rounded-xl border flex flex-col"
@@ -49,7 +52,7 @@ function SectionCard({
           href={href as never}
           className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
         >
-          View all <ArrowRight size={12} />
+          {t((d) => d.common.viewAll)} <ArrowRight size={12} className="rtl:rotate-180" />
         </Link>
       </div>
       <div className="flex-1 px-5 py-4">
@@ -69,6 +72,7 @@ function SectionCard({
 
 export default function DashboardPage() {
   const { user, accessToken } = useAuth();
+  const { t } = usePreferences();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -88,34 +92,39 @@ export default function DashboardPage() {
         setCampaigns(c.slice(0, 5));
         setTasks(t.filter((task) => task.status !== 'DONE').slice(0, 5));
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load data'))
+      .catch((err) => setError(err instanceof Error ? err.message : t((d) => d.dashboard.failedToLoad)))
       .finally(() => setLoading(false));
-  }, [user, accessToken]);
+  }, [user, accessToken, t]);
+
+  function statusLabel(status: string, category: keyof Translations['enums']): string {
+    const map = t((d) => d.enums[category]) as Record<string, string>;
+    return map[status] ?? status;
+  }
 
   const stats = [
     {
-      label: 'Active Goals',
+      label: t((d) => d.dashboard.activeGoals),
       value: goals.filter((g) => g.status === 'ACTIVE').length,
       icon: Target,
       iconBg: 'var(--info-bg)',
       iconColor: 'var(--info-text)',
     },
     {
-      label: 'Active Campaigns',
+      label: t((d) => d.dashboard.activeCampaigns),
       value: campaigns.filter((c) => c.status === 'ACTIVE').length,
       icon: Megaphone,
       iconBg: 'var(--success-bg)',
       iconColor: 'var(--success-text)',
     },
     {
-      label: 'Open Tasks',
+      label: t((d) => d.dashboard.openTasks),
       value: tasks.length,
       icon: CheckSquare,
       iconBg: 'var(--warning-bg)',
       iconColor: 'var(--warning-text)',
     },
     {
-      label: 'Total Campaigns',
+      label: t((d) => d.dashboard.totalCampaigns),
       value: campaigns.length,
       icon: TrendingUp,
       iconBg: 'var(--bg-muted)',
@@ -125,7 +134,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Dashboard" />
+      <Header title={t((d) => d.dashboard.title)} />
 
       <div className="flex-1 p-6 space-y-6">
         {error && (
@@ -149,17 +158,17 @@ export default function DashboardPage() {
               </div>
               <div className="flex-1">
                 <h2 className="text-base font-semibold text-white mb-1">
-                  Welcome to SH Marketing, {user?.firstName}!
+                  {t((d) => d.dashboard.welcome, { name: user?.firstName ?? '' })}
                 </h2>
                 <p className="text-sm text-blue-100 mb-4">
-                  Your AI marketing workspace is ready. Start by asking the AI Director to set up your first campaign.
+                  {t((d) => d.dashboard.subtitle)}
                 </p>
                 <Link
                   href="/chat"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 transition-colors"
                 >
                   <BrainCircuit size={14} />
-                  Open AI Director
+                  {t((d) => d.dashboard.openAiDirector)}
                 </Link>
               </div>
             </div>
@@ -184,51 +193,51 @@ export default function DashboardPage() {
         {/* Content sections */}
         <div className="grid gap-5 lg:grid-cols-3">
           <SectionCard
-            title="Recent Goals"
+            title={t((d) => d.dashboard.recentGoals)}
             href="/goals"
             loading={loading}
             empty={goals.length === 0}
-            emptyText="No goals yet — ask the AI Director to create one."
+            emptyText={t((d) => d.dashboard.noGoalsYet)}
           >
             <ul className="space-y-2.5">
               {goals.map((g) => (
                 <li key={g.id} className="flex items-center justify-between gap-3">
                   <span className="truncate text-sm" style={{ color: 'var(--text-primary)' }}>{g.title}</span>
-                  <Badge variant={statusVariant(g.status)}>{g.status}</Badge>
+                  <Badge variant={statusVariant(g.status)}>{statusLabel(g.status, 'goalStatus')}</Badge>
                 </li>
               ))}
             </ul>
           </SectionCard>
 
           <SectionCard
-            title="Recent Campaigns"
+            title={t((d) => d.dashboard.recentCampaigns)}
             href="/campaigns"
             loading={loading}
             empty={campaigns.length === 0}
-            emptyText="No campaigns yet."
+            emptyText={t((d) => d.dashboard.noCampaignsYet)}
           >
             <ul className="space-y-2.5">
               {campaigns.map((c) => (
                 <li key={c.id} className="flex items-center justify-between gap-3">
                   <span className="truncate text-sm" style={{ color: 'var(--text-primary)' }}>{c.title}</span>
-                  <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
+                  <Badge variant={statusVariant(c.status)}>{statusLabel(c.status, 'campaignStatus')}</Badge>
                 </li>
               ))}
             </ul>
           </SectionCard>
 
           <SectionCard
-            title="Open Tasks"
+            title={t((d) => d.dashboard.openTasksSection)}
             href="/tasks"
             loading={loading}
             empty={tasks.length === 0}
-            emptyText="No open tasks — great work!"
+            emptyText={t((d) => d.dashboard.noOpenTasks)}
           >
             <ul className="space-y-2.5">
-              {tasks.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3">
-                  <span className="truncate text-sm" style={{ color: 'var(--text-primary)' }}>{t.title}</span>
-                  <Badge variant={statusVariant(t.priority)}>{t.priority}</Badge>
+              {tasks.map((t2) => (
+                <li key={t2.id} className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm" style={{ color: 'var(--text-primary)' }}>{t2.title}</span>
+                  <Badge variant={statusVariant(t2.priority)}>{statusLabel(t2.priority, 'taskPriority')}</Badge>
                 </li>
               ))}
             </ul>
