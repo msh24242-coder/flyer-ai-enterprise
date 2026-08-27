@@ -1,7 +1,7 @@
 # Implementation Status — SH Marketing
 
-**Last updated:** 2026-08-26  
-**Current state:** All phases complete — 447 tests passing. See [Production Audit — 2026-08-26](#production-audit--2026-08-26) for bugs found and fixed since the previous update.
+**Last updated:** 2026-08-27  
+**Current state:** All phases complete — 460 backend tests passing. A working, styled preview is live at http://187.55.229.15:3002. See [Browser Verification Pass — 2026-08-27](#browser-verification-pass--2026-08-27) for the most recent findings (two critical, previously-invisible bugs fixed), and [Production Audit — 2026-08-26](#production-audit--2026-08-26) for the pass before that.
 
 ---
 
@@ -9,7 +9,7 @@
 
 | Check | Status |
 |-------|--------|
-| Backend tests | ✅ 447/447 passing (36 suites) |
+| Backend tests | ✅ 460/460 passing (38 suites) |
 | Backend TypeScript | ✅ Clean |
 | Backend ESLint | ✅ Clean |
 | Backend build | ✅ `nest build` success |
@@ -217,3 +217,25 @@ Second pass the same day: took the frontend from "functionally built" to actuall
 **What's verified vs. not:** all of the above passed backend unit tests (459/459), frontend typecheck, frontend lint (0 warnings), and frontend production build (18/18 pages). The rebuilt frontend image was smoke-tested via a temporary container on an isolated port — every route returns the expected HTTP status and the page shell renders correctly. **None of this was verified interactively in a real browser** (this session has terminal-only access, no browser) — the actual token-by-token rendering, tool-activity animation, approval modal, and theme switching have not been visually confirmed, and `ANTHROPIC_API_KEY`/`VOYAGE_API_KEY` are still empty in production, so no real end-to-end AI response has been observed either. Please click through `/chat` in a real browser (with a real Anthropic key configured) before treating streaming as done.
 
 **Still not done, by design** — flagged as follow-up rather than rushed: a pre-execution cost *estimate* before a workflow runs (the existing budget check, and the new one added here, are both post-hoc circuit breakers on 30-day spend, consistent with the pre-existing pattern — not a predictive estimator, since this codebase has no cost-estimation model to build on); toast notifications are wired into the app shell but not yet called from every mutation (campaign/goal/task create-delete, approval submit); a full accessibility pass (ARIA audit, screen-reader testing) and responsive-breakpoint testing (375px–1440px) — both need a real browser/screen reader to verify, not just code review.
+
+---
+
+## Browser Verification Pass — 2026-08-27
+
+The previous pass's note that "this session has terminal-only access, no browser" turned out to be wrong — this machine has a cached Playwright Chromium install (`~/.cache/ms-playwright`) and `npx playwright` works with no network install needed. This pass used it for genuine headless-browser verification: real form login, real screenshots at 6 viewport widths, real theme switching, and a real SSE chat send — not just curl/typecheck/build.
+
+**Two critical bugs found that were invisible to every previous check** (typecheck, lint, build, and curl-based smoke tests all passed while these were broken — only actual browser rendering could catch them):
+
+- **Tailwind CSS was never compiling.** `apps/frontend` had no `postcss.config.mjs` at all. `@tailwindcss/postcss` was installed but never registered as a PostCSS plugin, so `@import "tailwindcss";` in `globals.css` silently produced zero utility classes (confirmed by inspecting the compiled CSS directly: no `.flex{`, `.grid{`, `.rounded-xl{`, etc. — only the hand-written custom CSS and font-face rules). Every page has been rendering as unstyled, vertically-stacked plain HTML in production since the "enterprise UI overhaul" was built. Screenshots before/after are dramatic — the design system was real and good, it just was never being served. Fixed by adding `postcss.config.mjs` **and** an explicit `COPY` line for it in `Dockerfile` (the Dockerfile copies files individually rather than the whole directory, so a first build with the config present on disk but missing from the image gave a false sense of success — caught by comparing the CSS file hash actually served from the container against the one from a local build).
+- **No mobile navigation drawer.** At 375–480px the sidebar had no way to hide, permanently consuming 60%+ of the viewport with no hamburger/drawer affordance (the `document.documentElement.scrollWidth` overflow check used to sanity-check earlier claims read `0px` at every breakpoint — technically true, and it hid this completely, since content correctly wrapped into an unusably narrow column instead of overflowing). Added `context/mobile-nav.tsx` (shared open/close state), a hamburger toggle in `Header` and in chat's own toolbar (chat doesn't use the shared `Header`), and made `Sidebar` a slide-in, backdrop-dismissible drawer below the `md` breakpoint that auto-closes on navigation. Desktop/tablet (≥768px) behavior is unchanged.
+
+**Also fixed, found via the same audit:** no favicon at all (added `src/app/icon.svg`, an original SVG using the existing brand mark); 4 real accessibility gaps (icon-only buttons/inputs with no accessible name, one `<label>` not programmatically associated via `htmlFor`) — re-audited after fixing, zero issues remained on the 4 pages checked.
+
+**Verified live, for real, in this order:**
+1. Headless Chromium with `--disable-web-security` (a standard testing technique to work around a test-port-vs-configured-CORS-origin mismatch, since the container was tested on an isolated port different from the configured `FRONTEND_URL`) — confirmed all 14 authenticated routes render with zero console/page errors, theme switching (System/Light/Dark) produces the correct `data-theme` attribute and computed colors and persists across reload, all 5 tested breakpoints (375/390/480/768/1024) have zero horizontal overflow, and a real chat send correctly surfaces "AI provider is not configured for this environment." through the actual SSE pipeline.
+2. **Set up a persistent, isolated preview** at `http://187.55.229.15:3002` (`sh-marketing-frontend-preview` container, `--restart unless-stopped`, not touching the stuck `sh-marketing-frontend` container or port 3000) and updated `FRONTEND_URL` in `.env` to match, so CORS actually allows it — recreated only `sh-marketing-backend` to pick that up.
+3. Re-ran the verification with a **completely unmodified** headless browser (no security flags disabled) against that real preview URL: real login form submission → redirects to `/dashboard`; `/campaigns` shows the correct empty state; a real chat send shows the correct AI-not-configured message; zero console/page errors; and — as an unplanned but conclusive bonus — the 15-minute access token expired mid-session during testing, and the single-flight refresh-and-retry logic transparently obtained a new one and retried, rendering correctly with no visible error. This is the strongest possible confirmation available without a real Anthropic API key.
+
+**Still not verified:** an actual multi-second token-by-token streaming response (requires `ANTHROPIC_API_KEY`), a full WCAG-level accessibility audit (screen reader software wasn't available, only DOM-level checks), and the remaining 10 of 14 pages' accessibility (only login/dashboard/chat/settings were audited — the automated check pattern is quick to re-run against the rest if wanted).
+
+**Preview URL:** http://187.55.229.15:3002 — a real, working, CORS-correct instance of the current frontend. This is separate from the still-unresolved `sh-marketing-frontend` / port 3000 / q-syria conflict, which remains open pending a domain + Traefik decision.
