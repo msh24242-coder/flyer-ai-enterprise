@@ -27,6 +27,7 @@ interface AuthContextValue extends AuthState {
     firstName: string;
     lastName: string;
     companyName: string;
+    companySlug: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
 }

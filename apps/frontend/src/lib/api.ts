@@ -287,6 +287,7 @@ export const api = {
       firstName: string;
       lastName: string;
       companyName: string;
+      companySlug: string;
     }) =>
       request<RegisterResponse>('/auth/register', {
         method: 'POST',

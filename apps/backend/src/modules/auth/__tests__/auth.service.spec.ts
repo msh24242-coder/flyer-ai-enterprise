@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth.service';
 import { AuthRepository } from '../auth.repository';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 
 const mockUser = {
   id: 'user-1',
@@ -115,6 +115,93 @@ describe('AuthService', () => {
       expect(call.passwordHash).not.toBe(dto.password);
       const isHashed = await bcrypt.compare(dto.password, call.passwordHash);
       expect(isHashed).toBe(true);
+    });
+
+    it('retries with a suffixed variant when the requested slug is already taken', async () => {
+      mockAuthRepo.emailExists.mockResolvedValue(false);
+      // 'acme-corp' taken, 'acme-corp-2' free
+      mockAuthRepo.slugExists.mockImplementation(async (slug: string) => slug === 'acme-corp');
+      mockAuthRepo.createUserAndCompany.mockResolvedValue({ ...mockUser, companyId: 'company-2' });
+      mockAuthRepo.updateRefreshTokenHash.mockResolvedValue(undefined);
+
+      await service.register(dto);
+
+      expect(mockAuthRepo.createUserAndCompany).toHaveBeenCalledTimes(1);
+      expect(mockAuthRepo.createUserAndCompany).toHaveBeenCalledWith(
+        expect.objectContaining({ companySlug: 'acme-corp-2' }),
+      );
+    });
+
+    it('keeps trying variants past -2 until it finds a free one', async () => {
+      mockAuthRepo.emailExists.mockResolvedValue(false);
+      const taken = new Set(['acme-corp', 'acme-corp-2', 'acme-corp-3']);
+      mockAuthRepo.slugExists.mockImplementation(async (slug: string) => taken.has(slug));
+      mockAuthRepo.createUserAndCompany.mockResolvedValue(mockUser);
+      mockAuthRepo.updateRefreshTokenHash.mockResolvedValue(undefined);
+
+      await service.register(dto);
+
+      expect(mockAuthRepo.createUserAndCompany).toHaveBeenCalledWith(
+        expect.objectContaining({ companySlug: 'acme-corp-4' }),
+      );
+    });
+
+    it('retries when the DB rejects the slug with a unique-constraint error despite the pre-check passing (race)', async () => {
+      mockAuthRepo.emailExists.mockResolvedValue(false);
+      mockAuthRepo.slugExists.mockResolvedValue(false); // pre-check always says "free"
+      const raceError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { target: ['slug'] },
+      });
+      mockAuthRepo.createUserAndCompany
+        .mockRejectedValueOnce(raceError)
+        .mockResolvedValueOnce(mockUser);
+      mockAuthRepo.updateRefreshTokenHash.mockResolvedValue(undefined);
+
+      await service.register(dto);
+
+      expect(mockAuthRepo.createUserAndCompany).toHaveBeenCalledTimes(2);
+      expect(mockAuthRepo.createUserAndCompany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ companySlug: 'acme-corp' }),
+      );
+      expect(mockAuthRepo.createUserAndCompany).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ companySlug: 'acme-corp-2' }),
+      );
+    });
+
+    it('surfaces a clear error after exhausting all slug variant attempts', async () => {
+      mockAuthRepo.emailExists.mockResolvedValue(false);
+      mockAuthRepo.slugExists.mockResolvedValue(true); // every candidate is taken
+
+      await expect(service.register(dto)).rejects.toThrow(
+        'Unable to generate a unique company workspace slug',
+      );
+      expect(mockAuthRepo.createUserAndCompany).not.toHaveBeenCalled();
+    });
+
+    it('propagates non-slug database errors instead of retrying', async () => {
+      mockAuthRepo.emailExists.mockResolvedValue(false);
+      mockAuthRepo.slugExists.mockResolvedValue(false);
+      mockAuthRepo.createUserAndCompany.mockRejectedValue(new Error('DB connection lost'));
+
+      await expect(service.register(dto)).rejects.toThrow('DB connection lost');
+      expect(mockAuthRepo.createUserAndCompany).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves the correct company context on the issued tokens after a slug retry', async () => {
+      mockAuthRepo.emailExists.mockResolvedValue(false);
+      mockAuthRepo.slugExists.mockImplementation(async (slug: string) => slug === 'acme-corp');
+      mockAuthRepo.createUserAndCompany.mockResolvedValue({ ...mockUser, companyId: 'company-99' });
+      mockAuthRepo.updateRefreshTokenHash.mockResolvedValue(undefined);
+
+      await service.register(dto);
+
+      expect(mockJwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ companyId: 'company-99' }),
+      );
     });
   });
 

@@ -8,14 +8,24 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { AuthRepository } from './auth.repository';
 import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto, SafeUserDto } from './dto/auth-response.dto';
 import { JwtPayload, AuthenticatedUser } from './auth.types';
+import { buildSlugVariant } from '../../common/utils/slug';
 
 const BCRYPT_ROUNDS = 12;
 const REFRESH_TOKEN_BCRYPT_ROUNDS = 10;
+const MAX_SLUG_ATTEMPTS = 50;
+
+function isUniqueConstraintViolation(err: unknown, field: string): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === 'P2002' &&
+    String(err.meta?.target ?? '').includes(field)
+  );
+}
 
 @Injectable()
 export class AuthService {
@@ -34,20 +44,52 @@ export class AuthService {
     const emailTaken = await this.authRepo.emailExists(dto.email.toLowerCase());
     if (emailTaken) throw new ConflictException('Email already in use');
 
-    const slugTaken = await this.authRepo.slugExists(dto.companySlug);
-    if (slugTaken) throw new ConflictException('Company slug already taken');
-
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    const user = await this.authRepo.createUserAndCompany({
-      email: dto.email.toLowerCase(),
-      passwordHash,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      companyName: dto.companyName,
-      companySlug: dto.companySlug,
-    });
+    const user = await this.createCompanyWithUniqueSlug(dto, passwordHash);
 
     return this.issueTokens(user);
+  }
+
+  /**
+   * The frontend sends a slug derived from the company name, but that exact
+   * slug may already be taken by another workspace. Rather than fail the
+   * whole registration, deterministically try suffixed variants
+   * (-2, -3, ...). Checking existence first avoids most collisions cheaply;
+   * catching the actual unique-constraint error on insert (rather than
+   * trusting the pre-check alone) closes the race window between two
+   * concurrent registrations picking the same slug.
+   */
+  private async createCompanyWithUniqueSlug(
+    dto: RegisterDto,
+    passwordHash: string,
+  ): Promise<User> {
+    for (let attempt = 1; attempt <= MAX_SLUG_ATTEMPTS; attempt++) {
+      const candidateSlug = buildSlugVariant(dto.companySlug, attempt);
+
+      const slugTaken = await this.authRepo.slugExists(candidateSlug);
+      if (slugTaken) continue;
+
+      try {
+        return await this.authRepo.createUserAndCompany({
+          email: dto.email.toLowerCase(),
+          passwordHash,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          companyName: dto.companyName,
+          companySlug: candidateSlug,
+        });
+      } catch (err) {
+        if (isUniqueConstraintViolation(err, 'slug')) continue;
+        if (isUniqueConstraintViolation(err, 'email')) {
+          throw new ConflictException('Email already in use');
+        }
+        throw err;
+      }
+    }
+
+    throw new ConflictException(
+      'Unable to generate a unique company workspace slug. Please try a different company name.',
+    );
   }
 
   async validateCredentials(email: string, password: string): Promise<User | null> {

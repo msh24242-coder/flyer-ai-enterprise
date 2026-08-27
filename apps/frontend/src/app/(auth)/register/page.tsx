@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useMemo, FormEvent } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth';
 import { friendlyMessage } from '@/lib/api';
+import { slugify } from '@/lib/slug';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Zap, Check } from 'lucide-react';
@@ -54,6 +55,8 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const companySlug = useMemo(() => slugify(form.companyName), [form.companyName]);
+
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -62,9 +65,15 @@ export default function RegisterPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!companySlug) {
+      setError('Please enter a company name that includes at least one letter or number.');
+      return;
+    }
+
     setLoading(true);
     try {
-      await register(form);
+      await register({ ...form, companySlug });
     } catch (err) {
       setError(friendlyMessage(err));
     } finally {
@@ -106,13 +115,20 @@ export default function RegisterPage() {
             />
           </div>
 
-          <Input
-            label="Company name"
-            required
-            value={form.companyName}
-            onChange={update('companyName')}
-            placeholder="Acme Inc."
-          />
+          <div>
+            <Input
+              label="Company name"
+              required
+              value={form.companyName}
+              onChange={update('companyName')}
+              placeholder="Acme Inc."
+            />
+            {companySlug && (
+              <p className="mt-1.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                Workspace address: <span className="font-mono">{companySlug}</span>
+              </p>
+            )}
+          </div>
 
           <Input
             label="Work email"
