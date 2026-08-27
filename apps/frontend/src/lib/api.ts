@@ -345,6 +345,48 @@ export const api = {
     },
   },
 
+  products: {
+    list: (companyId: string, token: string, search?: string) => {
+      const qs = search ? `?search=${encodeURIComponent(search)}` : '';
+      return request<Array<{ id: string; sku: string; name: string; description?: string; basePrice: number; costPrice?: number; currency: string; stockQuantity?: number; category?: string; tags: string[]; isActive: boolean }>>(`/companies/${companyId}/products${qs}`, { token });
+    },
+    create: (companyId: string, token: string, data: { sku: string; name: string; description?: string; basePrice: number; costPrice?: number; currency?: string; stockQuantity?: number; category?: string; tags?: string[] }) =>
+      request<{ id: string; sku: string; name: string; basePrice: number }>(`/companies/${companyId}/products`, { method: 'POST', token, body: JSON.stringify(data) }),
+    update: (companyId: string, token: string, productId: string, data: { name?: string; description?: string; basePrice?: number; costPrice?: number; currency?: string; stockQuantity?: number; category?: string; tags?: string[]; isActive?: boolean }) =>
+      request<{ id: string; sku: string; name: string; basePrice: number }>(`/companies/${companyId}/products/${productId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
+    delete: (companyId: string, token: string, productId: string) =>
+      request<void>(`/companies/${companyId}/products/${productId}`, { method: 'DELETE', token }),
+  },
+
+  assets: {
+    list: (companyId: string, token: string, tag?: string) => {
+      const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
+      return request<Array<{ id: string; filename: string; mimeType: string; fileSizeBytes: number; publicUrl: string; tags: string[]; createdAt: string }>>(`/companies/${companyId}/assets${qs}`, { token });
+    },
+    upload: async (companyId: string, token: string, file: File, tags?: string[]) => {
+      const form = new FormData();
+      form.append('file', file);
+      if (tags?.length) form.append('tags', tags.join(','));
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/companies/${companyId}/assets`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+      } catch {
+        throw new ApiError(0, 'Network request failed', 'NETWORK_ERROR');
+      }
+      if (!res.ok) {
+        const { message, code, details } = await parseErrorBody(res);
+        throw new ApiError(res.status, message, code, details);
+      }
+      return res.json() as Promise<{ id: string; filename: string; publicUrl: string }>;
+    },
+    delete: (companyId: string, token: string, assetId: string) =>
+      request<void>(`/companies/${companyId}/assets/${assetId}`, { method: 'DELETE', token }),
+  },
+
   goals: {
     list: (companyId: string, token: string, status?: string) => {
       const qs = status ? `?status=${status}` : '';

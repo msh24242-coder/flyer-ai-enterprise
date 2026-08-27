@@ -129,6 +129,8 @@ model Company {
   agentExecutions  AgentExecution[]
   approvalRequests ApprovalRequest[]
   auditLogs        AuditLog[]
+  products         Product[]
+  assets           Asset[]
 
   @@map("companies")
 }
@@ -432,4 +434,46 @@ model GeneratedContent {
   @@index([companyId, contentType])
   @@index([companyId, agentType])
   @@map("generated_content")
+}
+
+model Product {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId     String   @db.Uuid
+  createdBy     String   @db.Uuid
+  sku           String
+  name          String
+  description   String?
+  basePrice     Float
+  costPrice     Float?
+  currency      String   @default("QAR")
+  stockQuantity Int?
+  category      String?
+  tags          String[] @default([])
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, sku])
+  @@index([companyId, isActive])
+  @@map("products")
+}
+
+model Asset {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId     String   @db.Uuid
+  uploadedBy    String   @db.Uuid
+  filename      String
+  mimeType      String
+  fileSizeBytes Int
+  storagePath   String
+  publicUrl     String
+  tags          String[] @default([])
+  createdAt     DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@map("assets")
 }

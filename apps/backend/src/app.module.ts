@@ -13,6 +13,8 @@ import { AgentsModule } from './modules/agents/agents.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { ContentModule } from './modules/content/content.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { ProductsModule } from './modules/products/products.module';
+import { AssetsModule } from './modules/assets/assets.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { AuditModule } from './modules/audit/audit.module';
     ApprovalsModule,
     ContentModule,
     AuditModule,
+    ProductsModule,
+    AssetsModule,
   ],
   providers: [
     {

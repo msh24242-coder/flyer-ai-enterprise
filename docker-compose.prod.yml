@@ -56,8 +56,11 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3-lite}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       PORT: 3001
+      UPLOADS_DIR: /app/uploads
     ports:
       - "3001:3001"
+    volumes:
+      - backend_uploads:/app/uploads
     networks:
       - sh-marketing-network
     depends_on:
@@ -97,6 +100,8 @@ volumes:
     name: sh_marketing_postgres_data
   redis_data:
     name: sh_marketing_redis_data
+  backend_uploads:
+    name: sh_marketing_backend_uploads
 
 networks:
   sh-marketing-network:
