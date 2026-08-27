@@ -239,3 +239,35 @@ The previous pass's note that "this session has terminal-only access, no browser
 **Still not verified:** an actual multi-second token-by-token streaming response (requires `ANTHROPIC_API_KEY`), a full WCAG-level accessibility audit (screen reader software wasn't available, only DOM-level checks), and the remaining 10 of 14 pages' accessibility (only login/dashboard/chat/settings were audited — the automated check pattern is quick to re-run against the rest if wanted).
 
 **Preview URL:** http://187.55.229.15:3002 — a real, working, CORS-correct instance of the current frontend. This is separate from the still-unresolved `sh-marketing-frontend` / port 3000 / q-syria conflict, which remains open pending a domain + Traefik decision.
+
+---
+
+## Bilingual Arabic/English + RTL — 2026-08-27
+
+Full i18n system added: `src/i18n/en.ts` + `ar.ts` (selector-function pattern — `t((d) => d.chat.title)` — for compile-time-checked keys and refactor safety), covering every page, dialog, error, and validation message across the app. A new `PreferencesProvider` persists language/timezone/time-format to `localStorage` and drives `document.documentElement.dir`/`lang` immediately, no reload. Centralized date/number/currency formatting on `Intl` (`lib/format.ts`): default timezone **Asia/Qatar**, Arabic locale (`ar-QA`) pinned to Western (Latin) digits via `numberingSystem: 'latn'`, English locale (`en-GB`) for day-month-year date order matching the region. Sidebar, header, and all 14 app pages converted from physical (`left`/`right`/`ml-`/`mr-`) to logical CSS properties (`start`/`end`, `ms-`/`me-`, `border-s`/`e`) for correct RTL mirroring without a brittle full-interface flip; directional icons (chevrons, arrows) get `rtl:-scale-x-100`.
+
+Added the frontend's first test runner (Vitest — none existed before): 33 tests covering date/number/currency formatting against known timestamps, locale persistence across reload, RTL/LTR `dir` attribute correctness, and a translation-completeness check (en/ar have identical key sets).
+
+**Verified:** typecheck, lint, full Vitest suite (33/33), and production build all clean. **Not verified in a real browser this pass** — no browser-based check of actual Arabic rendering, bidi text mixing, or RTL layout was performed as part of this specific change; the existing Playwright setup from the prior Browser Verification Pass could be re-run against `/dashboard`, `/chat`, etc. with the language switched to confirm visually.
+
+---
+
+## Flyer Creating — Phase 1: Products + Assets Foundation — 2026-08-27
+
+First phase of reimplementing the `flyerai` legacy Flyer Creating experience inside SH Marketing (full migration map covering both audited legacy codebases — a NestJS/Prisma "Catalog Builder" and a separate Express/MongoDB "flyerai" app — was produced via conversation analysis before any code was written; see conversation history for the complete file-by-file REUSE/ADAPT/REWRITE/DISCARD breakdown). This phase is foundation only: no `Flyer`/`FlyerProduct` model yet (Phase 2).
+
+**Backend:** new `Product` and `Asset` Prisma models, company-scoped via the existing `assertMembership` pattern, with query-level `companyId` scoping on update/delete (`updateMany`/`deleteMany` with the tenant filter baked into the `WHERE`, not just a pre-check) matching the codebase's existing tenant-isolation convention. `AssetsModule` uses real multer-based disk storage (MIME allowlist, 15MB limit, UUID filenames under a sanitized per-company folder, path-traversal-safe) instead of the legacy project's base64-in-database approach, backed by a new `backend_uploads` named Docker volume so uploads survive container recreation. 47 new tests (repository/service/controller/tenant-isolation for both modules, plus storage-service path-traversal and MIME/size validation) — **482 → 529 backend tests, all passing.**
+
+**Frontend:** minimal `/products` and `/assets` pages (list/create/delete, fully localized) so the new backend is actually usable ahead of the flyer editor itself landing in a later phase.
+
+**Database migration applied directly to the live production database** (`marketing_os` inside `sh-marketing-postgres`) via `prisma migrate deploy` run inside the container — additive only (two new tables), zero changes to any existing table or row. The root `.env`'s `DATABASE_URL` was discovered to point at an unrelated container's Postgres (port 5432 on the host belongs to `frontend-db-1`, a different project — `sh-marketing-postgres` has no host port mapping at all and is only reachable via the Docker network), so the migration diff was generated using a disposable, unrelated shadow Postgres container rather than that stale root `.env`, and hand-reviewed before applying to strip unrelated drift the raw diff tool produced (an unrelated vector-index drop and FK churn on unrelated tables) before it ever touched the real database.
+
+**Two real bugs found only by live end-to-end verification against the deployed container** (both invisible to typecheck/lint/unit tests, which mock the filesystem and don't know the app's global route prefix):
+- Asset upload failed with `EACCES` — the named Docker volume mounts fresh and root-owned, but the backend runs as a non-root user. Fixed in the Dockerfile (pre-create `/app/uploads` with correct ownership before the volume is mounted over it) plus a one-time in-place `chown` of the already-created volume.
+- Every generated asset `publicUrl` was missing the app's global `/api/v1` prefix (the serving controller sits behind it like every other controller), so every asset link 404'd. Fixed and re-verified.
+
+**Verified end-to-end against the live deployed backend** (fresh test account, cleaned up after): register → create product → duplicate SKU correctly rejected (409) → delete (204); upload image → fetch the returned `publicUrl` (200, real bytes) → delete → confirm removed from disk (404). Both `/products` and `/assets` frontend pages return 200 on the live preview (`:3002`) rebuilt from the same image.
+
+**Docker:** rebuilt only `sh-marketing-backend` and `sh-marketing-frontend` images/containers (three times total, iterating on the two bugs above); `postgres`, `redis`, the already-stuck `sh-marketing-frontend` (port 3000, pre-existing q-syria port conflict, untouched and unaffected by this work), and every q-syria container were never touched.
+
+**Not done, by design (later phases):** `Flyer`/`FlyerProduct` models and the flyer editor itself (Phase 2–3), CSV import/image-matching/autosave/undo-redo (Phase 4), templates/versions/restore (Phase 5), SVG/PDF/PNG/social export (Phase 6), approval/campaign integration (Phase 7), the AI assistant via SH Marketing's server-side agent tools (Phase 8).
