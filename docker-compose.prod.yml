@@ -49,6 +49,7 @@ services:
       REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
       REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:3001}
       AI_PROVIDER: ${AI_PROVIDER:-anthropic}
       AI_MODEL: ${AI_MODEL:-claude-opus-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}

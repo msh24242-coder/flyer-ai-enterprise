@@ -24,6 +24,11 @@ export class UploadsController {
     if (!diskPath || !existsSync(diskPath)) {
       throw new NotFoundException('Asset not found');
     }
+    // Helmet's default Cross-Origin-Resource-Policy is same-origin, which
+    // blocks exactly the cross-origin <img>/PDF-render embedding this
+    // endpoint exists for (frontend on a different origin, and headless
+    // Chromium loading images while rendering a flyer PDF/preview).
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.sendFile(diskPath);
   }
 }
