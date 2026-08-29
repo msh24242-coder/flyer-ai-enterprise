@@ -27,10 +27,15 @@ RUN npx prisma generate && npm run build
 
 # ── Stage 3: production ────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
-RUN apk add --no-cache dumb-init
+# chromium: headless-rendered flyer PDF export (flyers-export.service.ts) via
+# puppeteer-core, which ships no browser of its own — we point it at the
+# system install instead of downloading one.
+RUN apk add --no-cache dumb-init chromium
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY --from=builder /app/apps/backend/dist ./dist
 COPY --from=builder /app/apps/backend/package.json ./package.json

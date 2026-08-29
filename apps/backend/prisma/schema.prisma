@@ -452,6 +452,8 @@ model Product {
   createdBy     String   @db.Uuid
   sku           String
   name          String
+  nameAr        String?
+  imageUrl      String?
   description   String?
   basePrice     Float
   costPrice     Float?

@@ -1,33 +1,46 @@
+/** Number of catalog items per page — matches the legacy flyerai catalog
+ *  builder's grid options exactly (near-square auto layout). */
+export const GRID_OPTIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+export type GridOption = (typeof GRID_OPTIONS)[number];
+export const DEFAULT_GRID: GridOption = 6;
+
+/** Columns per row for a given grid size — mirrors flyerai's
+ *  `Math.ceil(Math.sqrt(gridSize))` near-square layout exactly. */
+export function gridColumns(grid: number): number {
+  return Math.ceil(Math.sqrt(grid));
+}
+
+/** Fixed print page size, matching flyerai's catalog builder exactly. */
+export const PAGE_WIDTH_MM = 150;
+export const PAGE_HEIGHT_MM = 180;
+
+/** Hard cap on paginated pages — matches flyerai's MAX_CATALOG_PAGES. */
+export const MAX_PAGES = 10;
+
 /**
  * Server-side shape for Flyer.designData — presentation/editor configuration
- * only (layout, branding, header/footer visibility). Deliberately does NOT
- * mirror full Product records: product placement/pricing lives in
- * FlyerProduct, keyed by productId, so the editor (Phase 3) looks products
- * up rather than duplicating their data into this blob.
+ * only (layout, branding). Deliberately does NOT mirror full Product
+ * records: product placement/pricing lives in FlyerProduct, keyed by
+ * productId, so the editor looks products up rather than duplicating their
+ * data into this blob.
  *
- * Kept loose (index signature) rather than strictly closed: the editor's
- * exact shape isn't finalized yet (Phase 3), and this type exists now only
- * to give the DTO/service something concrete to validate size/structure
- * against without prematurely locking in a schema that Phase 3 would then
- * have to migrate away from.
+ * Mirrors the legacy flyerai catalog builder's actual data model (a single
+ * item-count-per-page grid, not per-row column arrays; per-flyer branding
+ * with no company-level inheritance — confirmed empirically, flyerai has no
+ * fallback link from Company.brandColors into a flyer's own branding).
  */
 export interface FlyerDesignData {
-  layout?: number[];
+  layout?: {
+    grid?: GridOption;
+  };
   branding?: {
-    colors?: Record<string, string>;
-    fonts?: Record<string, string>;
-    logoAssetId?: string;
+    colors?: {
+      primary?: string;
+      secondary?: string;
+    };
+    logoUrl?: string;
+    backgroundUrl?: string;
   };
-  header?: {
-    title?: string;
-    showLogo?: boolean;
-  };
-  footer?: {
-    showBranches?: boolean;
-    showSocial?: boolean;
-    showDate?: boolean;
-  };
-  priceStyle?: string;
   [key: string]: unknown;
 }
 

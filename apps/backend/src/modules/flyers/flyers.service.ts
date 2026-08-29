@@ -17,6 +17,10 @@ import { UpdateFlyerDto } from './dto/update-flyer.dto';
 import { AddFlyerProductDto } from './dto/add-flyer-product.dto';
 import { UpdateFlyerProductDto } from './dto/update-flyer-product.dto';
 import { MAX_DESIGN_DATA_BYTES, FlyerDesignData } from './flyers.types';
+import { FlyersImportService, ImportResult } from './flyers-import.service';
+import { FlyersImagesService, ImageMatchFile, ImageMatchResult } from './flyers-images.service';
+import { FlyersExportService } from './flyers-export.service';
+import { buildFlyerHtml, FlyerHtmlItem } from './flyer-html.builder';
 
 const MAX_SLUG_ATTEMPTS = 50;
 
@@ -36,6 +40,9 @@ export class FlyersService {
     private readonly companyRepo: CompanyRepository,
     private readonly productsRepo: ProductsRepository,
     private readonly prisma: PrismaService,
+    private readonly importService: FlyersImportService,
+    private readonly imagesService: FlyersImagesService,
+    private readonly exportService: FlyersExportService,
   ) {}
 
   async list(companyId: string, requesterId: string, filters: { status?: FlyerStatus; campaignId?: string }): Promise<FlyerListItem[]> {
@@ -50,19 +57,20 @@ export class FlyersService {
     return flyer;
   }
 
-  async create(companyId: string, requesterId: string, dto: CreateFlyerDto): Promise<Flyer> {
+  async create(companyId: string, requesterId: string, dto: CreateFlyerDto): Promise<FlyerDetail> {
     await this.assertMembership(companyId, requesterId);
 
     if (dto.campaignId) await this.assertCampaignInCompany(companyId, dto.campaignId);
     this.assertDesignDataSize(dto.designData);
 
     const baseSlug = slugify(dto.title) || 'flyer';
-    return this.createWithUniqueSlug(companyId, requesterId, baseSlug, {
+    const created = await this.createWithUniqueSlug(companyId, requesterId, baseSlug, {
       title: dto.title,
       designData: (dto.designData as Prisma.InputJsonValue) ?? {},
       thumbnail: dto.thumbnail,
       ...(dto.campaignId ? { campaign: { connect: { id: dto.campaignId } } } : {}),
     });
+    return this.getDetailOrThrow(companyId, created.id);
   }
 
   /**
@@ -93,7 +101,7 @@ export class FlyersService {
     throw new ConflictException('Unable to generate a unique flyer slug. Please try a different title.');
   }
 
-  async update(companyId: string, requesterId: string, id: string, dto: UpdateFlyerDto): Promise<Flyer> {
+  async update(companyId: string, requesterId: string, id: string, dto: UpdateFlyerDto): Promise<FlyerDetail> {
     await this.assertMembership(companyId, requesterId);
 
     const existing = await this.flyersRepo.findById(companyId, id);
@@ -112,7 +120,7 @@ export class FlyersService {
 
     const updated = await this.flyersRepo.update(companyId, id, data);
     if (!updated) throw new NotFoundException('Flyer not found');
-    return updated;
+    return this.getDetailOrThrow(companyId, id);
   }
 
   async delete(companyId: string, requesterId: string, id: string): Promise<void> {
@@ -121,7 +129,28 @@ export class FlyersService {
     if (!deleted) throw new NotFoundException('Flyer not found');
   }
 
-  async duplicate(companyId: string, requesterId: string, id: string): Promise<Flyer> {
+  /**
+   * Archive/unarchive are deliberately separate from the approval lifecycle
+   * (DRAFT -> IN_REVIEW -> APPROVED/REJECTED, which UpdateFlyerDto excludes
+   * on purpose — those transitions belong behind the real ApprovalEngine).
+   * Archiving is an administrative "get this out of my active list" action,
+   * available from any status, and never itself submits anything for review.
+   */
+  async archive(companyId: string, requesterId: string, id: string): Promise<FlyerDetail> {
+    await this.assertMembership(companyId, requesterId);
+    const updated = await this.flyersRepo.update(companyId, id, { status: FlyerStatus.ARCHIVED });
+    if (!updated) throw new NotFoundException('Flyer not found');
+    return this.getDetailOrThrow(companyId, id);
+  }
+
+  async unarchive(companyId: string, requesterId: string, id: string): Promise<FlyerDetail> {
+    await this.assertMembership(companyId, requesterId);
+    const updated = await this.flyersRepo.update(companyId, id, { status: FlyerStatus.DRAFT });
+    if (!updated) throw new NotFoundException('Flyer not found');
+    return this.getDetailOrThrow(companyId, id);
+  }
+
+  async duplicate(companyId: string, requesterId: string, id: string): Promise<FlyerDetail> {
     await this.assertMembership(companyId, requesterId);
 
     const source = await this.flyersRepo.findDetailById(companyId, id);
@@ -147,7 +176,13 @@ export class FlyersService {
       });
     }
 
-    return duplicated;
+    return this.getDetailOrThrow(companyId, duplicated.id);
+  }
+
+  private async getDetailOrThrow(companyId: string, id: string): Promise<FlyerDetail> {
+    const detail = await this.flyersRepo.findDetailById(companyId, id);
+    if (!detail) throw new NotFoundException('Flyer not found');
+    return detail;
   }
 
   // ─── Flyer Products ───────────────────────────────────────────────────────
@@ -212,6 +247,55 @@ export class FlyersService {
     }
 
     await this.flyerProductsRepo.reorder(flyerId, order);
+  }
+
+  // ─── Excel import, image matching, preview & PDF export ──────────────────
+
+  async importExcel(companyId: string, requesterId: string, flyerId: string, buffer: Buffer): Promise<ImportResult> {
+    await this.assertMembership(companyId, requesterId);
+    await this.assertFlyerInCompany(companyId, flyerId);
+    return this.importService.importFromBuffer(companyId, requesterId, flyerId, buffer);
+  }
+
+  async uploadImages(companyId: string, requesterId: string, flyerId: string, files: ImageMatchFile[]): Promise<ImageMatchResult> {
+    await this.assertMembership(companyId, requesterId);
+    await this.assertFlyerInCompany(companyId, flyerId);
+    return this.imagesService.matchAndStore(companyId, files);
+  }
+
+  async renderHtml(companyId: string, requesterId: string, id: string): Promise<string> {
+    const flyer = await this.getById(companyId, requesterId, id);
+    return buildFlyerHtml({
+      title: flyer.title,
+      grid: (flyer.designData as FlyerDesignData | null)?.layout?.grid,
+      branding: (flyer.designData as FlyerDesignData | null)?.branding,
+      items: this.toHtmlItems(flyer),
+    }).html;
+  }
+
+  async exportPdf(companyId: string, requesterId: string, id: string): Promise<Buffer> {
+    const flyer = await this.getById(companyId, requesterId, id);
+    const { html } = buildFlyerHtml({
+      title: flyer.title,
+      grid: (flyer.designData as FlyerDesignData | null)?.layout?.grid,
+      branding: (flyer.designData as FlyerDesignData | null)?.branding,
+      items: this.toHtmlItems(flyer),
+    });
+    return this.exportService.renderPdf(html);
+  }
+
+  private toHtmlItems(flyer: FlyerDetail): FlyerHtmlItem[] {
+    return flyer.flyerProducts
+      .filter((fp) => fp.product.isActive)
+      .map((fp) => ({
+        sku: fp.product.sku,
+        name: fp.product.name,
+        nameAr: fp.product.nameAr,
+        imageUrl: fp.product.imageUrl,
+        displayPrice: fp.displayPrice ?? fp.product.basePrice,
+        originalPrice: fp.originalPrice,
+        currency: fp.product.currency,
+      }));
   }
 
   // ─── Tenant isolation helpers ─────────────────────────────────────────────

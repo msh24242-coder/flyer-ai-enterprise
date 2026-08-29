@@ -50,6 +50,9 @@ function makeService() {
     mockCompanyRepo as never,
     mockProductsRepo as never,
     mockPrisma as unknown as PrismaService,
+    {} as never,
+    {} as never,
+    {} as never,
   );
 }
 

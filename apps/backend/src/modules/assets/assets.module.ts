@@ -11,6 +11,6 @@ import { CompanyModule } from '../company/company.module';
   imports: [AuthModule, CompanyModule],
   controllers: [AssetsController, UploadsController],
   providers: [AssetsService, AssetsRepository, AssetsStorageService],
-  exports: [AssetsService, AssetsRepository],
+  exports: [AssetsService, AssetsRepository, AssetsStorageService],
 })
 export class AssetsModule {}

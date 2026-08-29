@@ -33,6 +33,8 @@ export class ProductsService {
     return this.productsRepo.create(companyId, requesterId, {
       sku: dto.sku,
       name: dto.name,
+      nameAr: dto.nameAr,
+      imageUrl: dto.imageUrl,
       description: dto.description,
       basePrice: dto.basePrice,
       costPrice: dto.costPrice,

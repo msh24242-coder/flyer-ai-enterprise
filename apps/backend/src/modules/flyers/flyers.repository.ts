@@ -23,7 +23,7 @@ const DETAIL_INCLUDE = {
     orderBy: { sortOrder: 'asc' },
     include: {
       product: {
-        select: { id: true, sku: true, name: true, basePrice: true, currency: true, isActive: true },
+        select: { id: true, sku: true, name: true, nameAr: true, imageUrl: true, basePrice: true, currency: true, isActive: true },
       },
     },
   },

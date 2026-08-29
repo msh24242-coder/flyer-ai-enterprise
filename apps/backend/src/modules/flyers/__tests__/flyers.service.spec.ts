@@ -56,6 +56,10 @@ const mockPrisma = {
   flyerProduct: { createMany: jest.fn() },
 };
 
+const mockImportService = { importFromBuffer: jest.fn() };
+const mockImagesService = { matchAndStore: jest.fn() };
+const mockExportService = { renderPdf: jest.fn() };
+
 function makeService() {
   return new FlyersService(
     mockFlyersRepo,
@@ -63,6 +67,9 @@ function makeService() {
     mockCompanyRepo as never,
     mockProductsRepo as never,
     mockPrisma as unknown as PrismaService,
+    mockImportService as never,
+    mockImagesService as never,
+    mockExportService as never,
   );
 }
 
@@ -76,6 +83,7 @@ describe('FlyersService', () => {
     it('creates a flyer with a slug derived from the title', async () => {
       mockFlyersRepo.slugExists.mockResolvedValue(false);
       mockFlyersRepo.create.mockResolvedValue(mockFlyer as never);
+      mockFlyersRepo.findDetailById.mockResolvedValue(mockFlyer as never);
 
       const result = await makeService().create(COMPANY_ID, USER_ID, { title: 'Weekly Offers' });
 
@@ -91,6 +99,7 @@ describe('FlyersService', () => {
     it('tries a suffixed slug variant when the base slug is taken', async () => {
       mockFlyersRepo.slugExists.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
       mockFlyersRepo.create.mockResolvedValue({ ...mockFlyer, slug: 'weekly-offers-2' } as never);
+      mockFlyersRepo.findDetailById.mockResolvedValue({ ...mockFlyer, slug: 'weekly-offers-2' } as never);
 
       const result = await makeService().create(COMPANY_ID, USER_ID, { title: 'Weekly Offers' });
 
@@ -106,6 +115,7 @@ describe('FlyersService', () => {
       mockFlyersRepo.slugExists.mockResolvedValue(false);
       const p2002 = Object.assign(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: { target: ['companyId', 'slug'] } }));
       mockFlyersRepo.create.mockRejectedValueOnce(p2002).mockResolvedValueOnce({ ...mockFlyer, slug: 'weekly-offers-2' } as never);
+      mockFlyersRepo.findDetailById.mockResolvedValue({ ...mockFlyer, slug: 'weekly-offers-2' } as never);
 
       const result = await makeService().create(COMPANY_ID, USER_ID, { title: 'Weekly Offers' });
       expect(result.slug).toBe('weekly-offers-2');
@@ -145,6 +155,7 @@ describe('FlyersService', () => {
     it('disconnects the campaign when campaignId is explicitly set to null', async () => {
       mockFlyersRepo.findById.mockResolvedValue(mockFlyer as never);
       mockFlyersRepo.update.mockResolvedValue(mockFlyer as never);
+      mockFlyersRepo.findDetailById.mockResolvedValue(mockFlyer as never);
 
       await makeService().update(COMPANY_ID, USER_ID, 'flyer-1', { campaignId: null });
 
@@ -182,15 +193,16 @@ describe('FlyersService', () => {
           { productId: 'prod-2', displayPrice: null, originalPrice: null, sortOrder: 1 },
         ],
       };
-      mockFlyersRepo.findDetailById.mockResolvedValue(source as never);
       mockFlyersRepo.slugExists.mockResolvedValue(false);
       const duplicated = { ...mockFlyer, id: 'flyer-2', slug: 'weekly-offers-copy' };
+      const duplicatedDetail = { ...duplicated, campaign: null, flyerProducts: source.flyerProducts };
+      mockFlyersRepo.findDetailById.mockResolvedValueOnce(source as never).mockResolvedValueOnce(duplicatedDetail as never);
       mockFlyersRepo.create.mockResolvedValue(duplicated as never);
       mockPrisma.flyerProduct.createMany.mockResolvedValue({ count: 2 });
 
       const result = await makeService().duplicate(COMPANY_ID, USER_ID, 'flyer-1');
 
-      expect(result).toEqual(duplicated);
+      expect(result).toEqual(duplicatedDetail);
       expect(mockFlyersRepo.create).toHaveBeenCalledWith(
         COMPANY_ID,
         USER_ID,
@@ -305,6 +317,108 @@ describe('FlyersService', () => {
       await expect(
         makeService().reorderProducts(COMPANY_ID, USER_ID, 'flyer-1', ['prod-a', 'prod-not-attached']),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('archive / unarchive', () => {
+    it('archive sets status to ARCHIVED', async () => {
+      mockFlyersRepo.update.mockResolvedValue({ ...mockFlyer, status: FlyerStatus.ARCHIVED } as never);
+      mockFlyersRepo.findDetailById.mockResolvedValue({ ...mockFlyer, status: FlyerStatus.ARCHIVED } as never);
+
+      const result = await makeService().archive(COMPANY_ID, USER_ID, 'flyer-1');
+
+      expect(mockFlyersRepo.update).toHaveBeenCalledWith(COMPANY_ID, 'flyer-1', { status: FlyerStatus.ARCHIVED });
+      expect(result.status).toBe(FlyerStatus.ARCHIVED);
+    });
+
+    it('unarchive sets status back to DRAFT', async () => {
+      mockFlyersRepo.update.mockResolvedValue({ ...mockFlyer, status: FlyerStatus.DRAFT } as never);
+      mockFlyersRepo.findDetailById.mockResolvedValue({ ...mockFlyer, status: FlyerStatus.DRAFT } as never);
+
+      await makeService().unarchive(COMPANY_ID, USER_ID, 'flyer-1');
+
+      expect(mockFlyersRepo.update).toHaveBeenCalledWith(COMPANY_ID, 'flyer-1', { status: FlyerStatus.DRAFT });
+    });
+
+    it('archive rejects a flyer that does not belong to this company', async () => {
+      mockFlyersRepo.update.mockResolvedValue(null);
+      await expect(makeService().archive(COMPANY_ID, USER_ID, 'flyer-missing')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('importExcel', () => {
+    it('checks membership and flyer ownership before delegating to the import service', async () => {
+      mockFlyersRepo.findById.mockResolvedValue(mockFlyer as never);
+      mockImportService.importFromBuffer.mockResolvedValue({ imported: 1, errors: [] });
+
+      const buffer = Buffer.from('xlsx-bytes');
+      const result = await makeService().importExcel(COMPANY_ID, USER_ID, 'flyer-1', buffer);
+
+      expect(mockImportService.importFromBuffer).toHaveBeenCalledWith(COMPANY_ID, USER_ID, 'flyer-1', buffer);
+      expect(result).toEqual({ imported: 1, errors: [] });
+    });
+
+    it('rejects when the flyer does not belong to this company', async () => {
+      mockFlyersRepo.findById.mockResolvedValue(null);
+      await expect(makeService().importExcel(COMPANY_ID, USER_ID, 'flyer-missing', Buffer.from(''))).rejects.toThrow(NotFoundException);
+      expect(mockImportService.importFromBuffer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('uploadImages', () => {
+    it('checks membership and flyer ownership before delegating to the images service', async () => {
+      mockFlyersRepo.findById.mockResolvedValue(mockFlyer as never);
+      mockImagesService.matchAndStore.mockResolvedValue({ matched: ['SKU-1'], unmatched: [] });
+
+      const files = [{ buffer: Buffer.from(''), mimetype: 'image/png', size: 1, originalname: 'SKU-1.png' }];
+      const result = await makeService().uploadImages(COMPANY_ID, USER_ID, 'flyer-1', files);
+
+      expect(mockImagesService.matchAndStore).toHaveBeenCalledWith(COMPANY_ID, files);
+      expect(result).toEqual({ matched: ['SKU-1'], unmatched: [] });
+    });
+  });
+
+  describe('renderHtml / exportPdf', () => {
+    const detail = {
+      ...mockFlyer,
+      designData: { layout: { grid: 4 }, branding: { colors: { primary: '#111827' } } },
+      campaign: null,
+      flyerProducts: [
+        {
+          displayPrice: 9.99,
+          originalPrice: 12.99,
+          product: { sku: 'A', name: 'Widget', nameAr: 'ودجيت', imageUrl: null, basePrice: 12.99, currency: 'QAR', isActive: true },
+        },
+        {
+          displayPrice: 5,
+          originalPrice: null,
+          product: { sku: 'B', name: 'Inactive Widget', nameAr: null, imageUrl: null, basePrice: 5, currency: 'QAR', isActive: false },
+        },
+      ],
+    };
+
+    it('renderHtml builds the canonical HTML from the flyer, filtering out inactive products', async () => {
+      mockFlyersRepo.findDetailById.mockResolvedValue(detail as never);
+
+      const html = await makeService().renderHtml(COMPANY_ID, USER_ID, 'flyer-1');
+
+      expect(html).toContain('Widget');
+      expect(html).not.toContain('Inactive Widget');
+    });
+
+    it('exportPdf renders the same canonical HTML through the export service', async () => {
+      mockFlyersRepo.findDetailById.mockResolvedValue(detail as never);
+      mockExportService.renderPdf.mockResolvedValue(Buffer.from('%PDF-1.4'));
+
+      const pdf = await makeService().exportPdf(COMPANY_ID, USER_ID, 'flyer-1');
+
+      expect(mockExportService.renderPdf).toHaveBeenCalledWith(expect.stringContaining('Widget'));
+      expect(pdf).toEqual(Buffer.from('%PDF-1.4'));
+    });
+
+    it('rejects when the flyer does not exist in this company', async () => {
+      mockFlyersRepo.findDetailById.mockResolvedValue(null);
+      await expect(makeService().renderHtml(COMPANY_ID, USER_ID, 'flyer-missing')).rejects.toThrow(NotFoundException);
     });
   });
 });
