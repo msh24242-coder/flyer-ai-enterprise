@@ -104,6 +104,14 @@ enum ConversationStatus {
   ARCHIVED
 }
 
+enum FlyerStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Company {
@@ -131,6 +139,7 @@ model Company {
   auditLogs        AuditLog[]
   products         Product[]
   assets           Asset[]
+  flyers           Flyer[]
 
   @@map("companies")
 }
@@ -232,6 +241,7 @@ model Campaign {
   goal             MarketingGoal?    @relation(fields: [goalId], references: [id])
   tasks            Task[]
   generatedContent GeneratedContent[]
+  flyers           Flyer[]
 
   @@index([companyId, status])
   @@index([goalId])
@@ -453,7 +463,8 @@ model Product {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  flyerProducts FlyerProduct[]
 
   @@unique([companyId, sku])
   @@index([companyId, isActive])
@@ -476,4 +487,46 @@ model Asset {
 
   @@index([companyId, createdAt])
   @@map("assets")
+}
+
+model Flyer {
+  id          String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  companyId   String      @db.Uuid
+  createdBy   String      @db.Uuid
+  title       String
+  slug        String
+  status      FlyerStatus @default(DRAFT)
+  designData  Json        @default("{}")
+  thumbnail   String?
+  campaignId  String?     @db.Uuid
+  publishedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campaign      Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  flyerProducts FlyerProduct[]
+
+  @@unique([companyId, slug])
+  @@index([companyId, status])
+  @@index([campaignId])
+  @@map("flyers")
+}
+
+model FlyerProduct {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  flyerId       String   @db.Uuid
+  productId     String   @db.Uuid
+  displayPrice  Float?
+  originalPrice Float?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  flyer   Flyer   @relation(fields: [flyerId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([flyerId, productId])
+  @@index([flyerId, sortOrder])
+  @@map("flyer_products")
 }

@@ -15,6 +15,7 @@ import { ContentModule } from './modules/content/content.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ProductsModule } from './modules/products/products.module';
 import { AssetsModule } from './modules/assets/assets.module';
+import { FlyersModule } from './modules/flyers/flyers.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AssetsModule } from './modules/assets/assets.module';
     AuditModule,
     ProductsModule,
     AssetsModule,
+    FlyersModule,
   ],
   providers: [
     {
