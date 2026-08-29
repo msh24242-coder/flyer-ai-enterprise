@@ -21,6 +21,7 @@ import {
   Zap,
   Package,
   Images,
+  Newspaper,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useMobileNav } from '@/context/mobile-nav';
@@ -34,13 +35,22 @@ interface NavItem {
   badge?: string;
 }
 
-const mainNav: NavItem[] = [
+const topNav: NavItem[] = [
   { href: '/dashboard', labelKey: 'dashboard', icon: LayoutDashboard },
   { href: '/chat', labelKey: 'aiDirector', icon: BrainCircuit },
   { href: '/goals', labelKey: 'goals', icon: Target },
   { href: '/campaigns', labelKey: 'campaigns', icon: Megaphone },
+];
+
+/** Grouped together under a "Flyer Creating" section label — flyers are
+ *  built directly from the company's Products and Assets catalogs. */
+const flyerCreatingNav: NavItem[] = [
+  { href: '/flyers', labelKey: 'flyers', icon: Newspaper },
   { href: '/products', labelKey: 'products', icon: Package },
   { href: '/assets', labelKey: 'assets', icon: Images },
+];
+
+const restNav: NavItem[] = [
   { href: '/tasks', labelKey: 'tasks', icon: CheckSquare },
   { href: '/knowledge', labelKey: 'knowledge', icon: BookOpen },
   { href: '/content', labelKey: 'content', icon: FileText },
@@ -144,7 +154,22 @@ export function Sidebar() {
 
       {/* Main nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5" onClick={close}>
-        {mainNav.map((item) => (
+        {topNav.map((item) => (
+          <NavLink key={item.href} item={item} label={t((d) => d.nav[item.labelKey])} active={isActive(item.href)} collapsed={collapsed} />
+        ))}
+
+        {!collapsed && (
+          <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+            {t((d) => d.sidebar.flyerCreatingSection)}
+          </p>
+        )}
+        {collapsed && <div className="my-2 border-t border-[#1e2433]" />}
+        {flyerCreatingNav.map((item) => (
+          <NavLink key={item.href} item={item} label={t((d) => d.nav[item.labelKey])} active={isActive(item.href)} collapsed={collapsed} />
+        ))}
+
+        <div className="my-2 border-t border-[#1e2433]" />
+        {restNav.map((item) => (
           <NavLink key={item.href} item={item} label={t((d) => d.nav[item.labelKey])} active={isActive(item.href)} collapsed={collapsed} />
         ))}
       </nav>

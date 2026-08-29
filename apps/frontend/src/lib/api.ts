@@ -273,6 +273,98 @@ async function streamAgentRun(
   }
 }
 
+// ── Products & Flyers ──────────────────────────────────────────────────────
+
+export interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  nameAr?: string | null;
+  imageUrl?: string | null;
+  description?: string;
+  basePrice: number;
+  costPrice?: number;
+  currency: string;
+  stockQuantity?: number;
+  category?: string;
+  tags: string[];
+  isActive: boolean;
+}
+
+export interface FlyerListItem {
+  id: string;
+  title: string;
+  slug: string;
+  status: 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
+  thumbnail: string | null;
+  campaignId: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  campaign: { id: string; title: string } | null;
+}
+
+export interface FlyerDesignData {
+  layout?: { grid?: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 };
+  branding?: {
+    colors?: { primary?: string; secondary?: string };
+    logoUrl?: string;
+    backgroundUrl?: string;
+  };
+}
+
+export interface FlyerProductLink {
+  displayPrice: number | null;
+  originalPrice: number | null;
+  sortOrder: number;
+  product: Pick<Product, 'id' | 'sku' | 'name' | 'nameAr' | 'imageUrl' | 'basePrice' | 'currency' | 'isActive'>;
+}
+
+export interface FlyerDetail {
+  id: string;
+  companyId: string;
+  createdBy: string;
+  title: string;
+  slug: string;
+  status: FlyerListItem['status'];
+  designData: FlyerDesignData;
+  thumbnail: string | null;
+  campaignId: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  campaign: { id: string; title: string } | null;
+  flyerProducts: FlyerProductLink[];
+}
+
+async function fetchBlob(path: string, token: string): Promise<Blob> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new ApiError(0, 'Network request failed', 'NETWORK_ERROR');
+  }
+  if (!res.ok) {
+    const { message, code, details } = await parseErrorBody(res);
+    throw new ApiError(res.status, message, code, details);
+  }
+  return res.blob();
+}
+
+async function postForm<T>(path: string, token: string, form: FormData): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+  } catch {
+    throw new ApiError(0, 'Network request failed', 'NETWORK_ERROR');
+  }
+  if (!res.ok) {
+    const { message, code, details } = await parseErrorBody(res);
+    throw new ApiError(res.status, message, code, details);
+  }
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -348,12 +440,12 @@ export const api = {
   products: {
     list: (companyId: string, token: string, search?: string) => {
       const qs = search ? `?search=${encodeURIComponent(search)}` : '';
-      return request<Array<{ id: string; sku: string; name: string; description?: string; basePrice: number; costPrice?: number; currency: string; stockQuantity?: number; category?: string; tags: string[]; isActive: boolean }>>(`/companies/${companyId}/products${qs}`, { token });
+      return request<Product[]>(`/companies/${companyId}/products${qs}`, { token });
     },
-    create: (companyId: string, token: string, data: { sku: string; name: string; description?: string; basePrice: number; costPrice?: number; currency?: string; stockQuantity?: number; category?: string; tags?: string[] }) =>
-      request<{ id: string; sku: string; name: string; basePrice: number }>(`/companies/${companyId}/products`, { method: 'POST', token, body: JSON.stringify(data) }),
-    update: (companyId: string, token: string, productId: string, data: { name?: string; description?: string; basePrice?: number; costPrice?: number; currency?: string; stockQuantity?: number; category?: string; tags?: string[]; isActive?: boolean }) =>
-      request<{ id: string; sku: string; name: string; basePrice: number }>(`/companies/${companyId}/products/${productId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
+    create: (companyId: string, token: string, data: { sku: string; name: string; nameAr?: string; imageUrl?: string; description?: string; basePrice: number; costPrice?: number; currency?: string; stockQuantity?: number; category?: string; tags?: string[] }) =>
+      request<Product>(`/companies/${companyId}/products`, { method: 'POST', token, body: JSON.stringify(data) }),
+    update: (companyId: string, token: string, productId: string, data: { name?: string; nameAr?: string; imageUrl?: string; description?: string; basePrice?: number; costPrice?: number; currency?: string; stockQuantity?: number; category?: string; tags?: string[]; isActive?: boolean }) =>
+      request<Product>(`/companies/${companyId}/products/${productId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
     delete: (companyId: string, token: string, productId: string) =>
       request<void>(`/companies/${companyId}/products/${productId}`, { method: 'DELETE', token }),
   },
@@ -385,6 +477,62 @@ export const api = {
     },
     delete: (companyId: string, token: string, assetId: string) =>
       request<void>(`/companies/${companyId}/assets/${assetId}`, { method: 'DELETE', token }),
+  },
+
+  flyers: {
+    list: (token: string, status?: string, campaignId?: string) => {
+      const qs = new URLSearchParams();
+      if (status) qs.set('status', status);
+      if (campaignId) qs.set('campaignId', campaignId);
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<FlyerListItem[]>(`/flyers${suffix}`, { token });
+    },
+    get: (token: string, id: string) => request<FlyerDetail>(`/flyers/${id}`, { token }),
+    create: (token: string, data: { title: string; campaignId?: string; designData?: FlyerDesignData; thumbnail?: string }) =>
+      request<FlyerDetail>('/flyers', { method: 'POST', token, body: JSON.stringify(data) }),
+    update: (token: string, id: string, data: { title?: string; campaignId?: string | null; designData?: FlyerDesignData; thumbnail?: string | null }) =>
+      request<FlyerDetail>(`/flyers/${id}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
+    delete: (token: string, id: string) => request<void>(`/flyers/${id}`, { method: 'DELETE', token }),
+    duplicate: (token: string, id: string) => request<FlyerDetail>(`/flyers/${id}/duplicate`, { method: 'POST', token }),
+    archive: (token: string, id: string) => request<FlyerDetail>(`/flyers/${id}/archive`, { method: 'PATCH', token }),
+    unarchive: (token: string, id: string) => request<FlyerDetail>(`/flyers/${id}/unarchive`, { method: 'PATCH', token }),
+
+    addProduct: (token: string, flyerId: string, data: { productId: string; displayPrice?: number; originalPrice?: number; sortOrder?: number }) =>
+      request<FlyerProductLink>(`/flyers/${flyerId}/products`, { method: 'POST', token, body: JSON.stringify(data) }),
+    updateProduct: (token: string, flyerId: string, productId: string, data: { displayPrice?: number; originalPrice?: number }) =>
+      request<FlyerProductLink>(`/flyers/${flyerId}/products/${productId}`, { method: 'PATCH', token, body: JSON.stringify(data) }),
+    removeProduct: (token: string, flyerId: string, productId: string) =>
+      request<void>(`/flyers/${flyerId}/products/${productId}`, { method: 'DELETE', token }),
+    reorderProducts: (token: string, flyerId: string, order: string[]) =>
+      request<void>(`/flyers/${flyerId}/products/reorder`, { method: 'PATCH', token, body: JSON.stringify({ order }) }),
+
+    importExcel: (token: string, flyerId: string, file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return postForm<{ imported: number; errors: Array<{ row: number; message: string }> }>(`/flyers/${flyerId}/import`, token, form);
+    },
+    downloadTemplate: (token: string) => fetchBlob('/flyers/import/template', token),
+
+    uploadImages: (token: string, flyerId: string, files: File[]) => {
+      const form = new FormData();
+      for (const file of files) form.append('files', file);
+      return postForm<{ matched: string[]; unmatched: string[] }>(`/flyers/${flyerId}/images`, token, form);
+    },
+
+    previewHtml: async (token: string, flyerId: string): Promise<string> => {
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/flyers/${flyerId}/preview`, { headers: { Authorization: `Bearer ${token}` } });
+      } catch {
+        throw new ApiError(0, 'Network request failed', 'NETWORK_ERROR');
+      }
+      if (!res.ok) {
+        const { message, code, details } = await parseErrorBody(res);
+        throw new ApiError(res.status, message, code, details);
+      }
+      return res.text();
+    },
+    exportPdf: (token: string, flyerId: string) => fetchBlob(`/flyers/${flyerId}/export/pdf`, token),
   },
 
   goals: {
